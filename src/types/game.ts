@@ -2,7 +2,7 @@ export type GameMode = 'exhibition' | 'tournament' | 'penalties' | 'training';
 
 export type Difficulty = 'amateur' | 'semi-pro' | 'world-class';
 
-export type Weather = 'sunny' | 'night' | 'rain';
+export type Weather = 'sunny' | 'night' | 'rain' | 'snow';
 
 export type PlayerRole = 'GK' | 'DEF' | 'MID' | 'FWD';
 
@@ -25,6 +25,13 @@ export interface PlayerStats {
   keeper: number;      // 1 - 99 (relevant for GK)
 }
 
+export interface PlayerMatchStats {
+  goals: number;
+  assists: number;
+  tackles: number;
+  shots: number;
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -38,6 +45,7 @@ export interface Player {
   targetX: number;
   targetY: number;
   stats: PlayerStats;
+  matchStats: PlayerMatchStats;
   stamina: number;
   maxStamina: number;
   facingAngle: number;
@@ -74,7 +82,7 @@ export interface Team {
     defense: number;
     stamina: number;
   };
-  squad: Omit<Player, 'x' | 'y' | 'vx' | 'vy' | 'targetX' | 'targetY' | 'stamina' | 'maxStamina' | 'facingAngle' | 'animFrame' | 'animTimer' | 'state' | 'stateTimer' | 'yellowCards' | 'hasRedCard' | 'isControlled'>[];
+  squad: Omit<Player, 'x' | 'y' | 'vx' | 'vy' | 'targetX' | 'targetY' | 'matchStats' | 'stamina' | 'maxStamina' | 'facingAngle' | 'animFrame' | 'animTimer' | 'state' | 'stateTimer' | 'yellowCards' | 'hasRedCard' | 'isControlled'>[];
 }
 
 export interface Ball {
@@ -107,6 +115,10 @@ export interface GoalEvent {
   minute: number;
   scorerName: string;
   scorerNumber: number;
+  scorerId: string;
+  assistName?: string;
+  assistNumber?: number;
+  assistId?: string;
   teamId: string;
   teamName: string;
   isPenalty?: boolean;
@@ -125,11 +137,34 @@ export interface ReplayFrame {
   }[];
 }
 
+export interface HighlightClip {
+  id: string;
+  title: string;
+  description: string;
+  minute: number;
+  type: 'goal' | 'save' | 'woodwork';
+  teamName: string;
+  frames: ReplayFrame[];
+  importanceScore: number;
+}
+
 export interface BannerMessage {
   text: string;
   subtext?: string;
   type: 'goal' | 'save' | 'foul' | 'yellow_card' | 'red_card' | 'offside' | 'whistle' | 'halftime' | 'fulltime' | 'corner' | 'penalty';
   duration: number;
+}
+
+export interface CommentaryToast {
+  id: string;
+  type: 'goal' | 'save' | 'red_card' | 'yellow_card' | 'woodwork';
+  headline: string;
+  commentary: string;
+  playerName?: string;
+  teamName: string;
+  teamFlag?: string;
+  minute: number;
+  durationMs?: number;
 }
 
 export interface TournamentMatch {

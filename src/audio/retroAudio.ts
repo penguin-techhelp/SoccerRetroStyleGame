@@ -521,6 +521,33 @@ class RetroAudioEngine {
     osc.start(t);
     osc.stop(t + 0.09);
   }
+
+  /** 16-Bit Arcade Commentator Notification Jingle */
+  public playCommentaryJingle() {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx || !this.masterGain) return;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    // Arpeggio broadcast ping
+    osc.frequency.setValueAtTime(587.33, t); // D5
+    osc.frequency.setValueAtTime(880.0, t + 0.06); // A5
+    osc.frequency.setValueAtTime(1174.66, t + 0.12); // D6
+
+    gain.gain.setValueAtTime(0.2, t);
+    gain.gain.setValueAtTime(0.22, t + 0.06);
+    gain.gain.setValueAtTime(0.25, t + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.33);
+  }
 }
 
 export const retroAudio = new RetroAudioEngine();

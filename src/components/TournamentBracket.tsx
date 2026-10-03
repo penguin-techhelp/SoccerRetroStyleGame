@@ -126,7 +126,7 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
         nextRoundMatches.push({
           id: `final_0`,
           round: 'final',
-          roundName: 'WORLD CUP FINAL',
+          roundName: 'RETRO SOCCER FINAL',
           homeTeam: winners[0],
           awayTeam: winners[1],
           played: false
@@ -159,7 +159,7 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
         <div className="flex items-center gap-2">
           <Trophy className="w-5 h-5 text-yellow-400" />
           <h2 className="font-pixel text-sm md:text-base text-yellow-300 tracking-wider">
-            16-BIT WORLD CUP '94
+            RETRO SOCCER '94
           </h2>
         </div>
 
@@ -180,10 +180,10 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
               referrerPolicy="no-referrer"
             />
             <h1 className="font-pixel text-xl sm:text-2xl text-yellow-300 mb-2">
-              WORLD CHAMPIONS!
+              RETRO SOCCER CHAMPIONS!
             </h1>
             <p className="font-arcade text-sm text-slate-200 mb-6">
-              {userTeam.name.toUpperCase()} LIFTS THE 1994 TROPHY!
+              {userTeam.name.toUpperCase()} LIFTS THE RETRO SOCCER TROPHY!
             </p>
             <button
               onClick={onBack}
@@ -197,7 +197,7 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
             {/* Round Name Banner */}
             <div className="text-center mb-6">
               <span className="font-pixel text-xs text-yellow-400 tracking-widest bg-yellow-950/70 border border-yellow-700/60 px-4 py-1.5 inline-block">
-                CURRENT STAGE: {currentRound === 'r16' ? 'ROUND OF 16' : currentRound === 'qf' ? 'QUARTER FINALS' : currentRound === 'sf' ? 'SEMI FINALS' : 'WORLD CUP FINAL'}
+                CURRENT STAGE: {currentRound === 'r16' ? 'ROUND OF 16' : currentRound === 'qf' ? 'QUARTER FINALS' : currentRound === 'sf' ? 'SEMI FINALS' : 'RETRO SOCCER FINAL'}
               </span>
             </div>
 

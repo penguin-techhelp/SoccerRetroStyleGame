@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { GameMode, Difficulty, Weather } from '../types/game';
 import { retroAudio } from '../audio/retroAudio';
-import { Volume2, VolumeX, Tv, HelpCircle, Trophy, Play, Target, Shield } from 'lucide-react';
+import { Volume2, VolumeX, Tv, HelpCircle, Trophy, Play, Target, Shield, Award } from 'lucide-react';
 
 interface TitleScreenProps {
   onSelectMode: (mode: GameMode) => void;
@@ -16,6 +16,7 @@ interface TitleScreenProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
   onOpenControls: () => void;
+  onOpenRoster?: () => void;
 }
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({
@@ -31,6 +32,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   soundEnabled,
   onToggleSound,
   onOpenControls,
+  onOpenRoster,
 }) => {
   const [hasStartedMusic, setHasStartedMusic] = useState(false);
 
@@ -104,6 +106,22 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             <HelpCircle className="w-3.5 h-3.5" />
             <span>HOW TO PLAY</span>
           </button>
+
+          {/* 100 Players Database Roster */}
+          {onOpenRoster && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                retroAudio.playMenuBeep();
+                onOpenRoster();
+              }}
+              className="px-3 py-1.5 text-xs font-arcade border border-yellow-500/80 bg-yellow-950/40 text-yellow-300 hover:bg-yellow-900/60 hover:border-yellow-400 flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Official 100 Players Database from PDF"
+            >
+              <Award className="w-3.5 h-3.5 text-yellow-400" />
+              <span>100 PLAYERS [PDF]</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -150,7 +168,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           >
             <div className="flex items-center justify-between mb-1">
               <span className="font-pixel text-xs sm:text-sm text-yellow-400 group-hover:text-yellow-200">
-                16-BIT WORLD CUP
+                RETRO SOCCER
               </span>
               <Trophy className="w-4 h-4 text-yellow-400 group-hover:scale-110 transition-transform" />
             </div>
@@ -244,7 +262,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-arcade">PITCH:</span>
             <div className="flex gap-1">
-              {(['sunny', 'night', 'rain'] as Weather[]).map((w) => (
+              {(['sunny', 'night', 'rain', 'snow'] as Weather[]).map((w) => (
                 <button
                   key={w}
                   onClick={(e) => {

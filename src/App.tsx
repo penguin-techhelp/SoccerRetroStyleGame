@@ -14,6 +14,7 @@ import { PenaltyShootout } from './components/PenaltyShootout';
 import { TrainingMode } from './components/TrainingMode';
 import { MatchSummaryModal } from './components/MatchSummaryModal';
 import { ControlsModal } from './components/ControlsModal';
+import { PlayerDatabaseModal } from './components/PlayerDatabaseModal';
 import { SoccerGameEngine } from './game/engine';
 import { retroAudio } from './audio/retroAudio';
 
@@ -51,6 +52,7 @@ export default function App() {
   // Match Summary State
   const [finishedEngine, setFinishedEngine] = useState<SoccerGameEngine | null>(null);
   const [showControlsModal, setShowControlsModal] = useState(false);
+  const [showRosterModal, setShowRosterModal] = useState(false);
 
   // Sound toggle
   const handleToggleSound = () => {
@@ -142,6 +144,7 @@ export default function App() {
           soundEnabled={settings.soundEnabled}
           onToggleSound={handleToggleSound}
           onOpenControls={() => setShowControlsModal(true)}
+          onOpenRoster={() => setShowRosterModal(true)}
         />
       )}
 
@@ -150,6 +153,7 @@ export default function App() {
         <TeamSelect
           onBack={() => setCurrentScreen('TITLE')}
           onConfirmTeams={handleConfirmExhibitionTeams}
+          onOpenRoster={() => setShowRosterModal(true)}
         />
       )}
 
@@ -159,6 +163,7 @@ export default function App() {
           isTournament={true}
           onBack={() => setCurrentScreen('TITLE')}
           onConfirmTeams={(team) => handleConfirmTournamentTeam(team)}
+          onOpenRoster={() => setShowRosterModal(true)}
         />
       )}
 
@@ -208,6 +213,11 @@ export default function App() {
       {/* Controls & Playbook Modal */}
       {showControlsModal && (
         <ControlsModal onClose={() => setShowControlsModal(false)} />
+      )}
+
+      {/* Official 100 Players Database Roster Modal */}
+      {showRosterModal && (
+        <PlayerDatabaseModal onClose={() => setShowRosterModal(false)} />
       )}
     </div>
   );

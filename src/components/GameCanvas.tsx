@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { SoccerGameEngine } from '../game/engine';
 import { SoccerRenderer } from '../game/renderer';
-import { MatchSettings, Team } from '../types/game';
+import { MatchSettings, Team, CommentaryToast } from '../types/game';
 import { retroAudio } from '../audio/retroAudio';
+import { CommentaryToastBox } from './CommentaryToastBox';
 import { Pause, Play, RotateCcw, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
 
 interface GameCanvasProps {
@@ -31,6 +32,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [matchPeriod, setMatchPeriod] = useState<'1ST' | '2ND' | 'HT' | 'FT'>('1ST');
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
+  const [commentaryToast, setCommentaryToast] = useState<CommentaryToast | null>(null);
 
   // Keyboard input states
   const keysDown = useRef<Record<string, boolean>>({});
@@ -53,6 +55,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   useEffect(() => {
     const engine = new SoccerGameEngine(homeTeam, awayTeam, settings);
     engineRef.current = engine;
+
+    engine.onCommentaryEvent = (toast: CommentaryToast) => {
+      setCommentaryToast(toast);
+      retroAudio.playCommentaryJingle();
+    };
 
     if (canvasRef.current) {
       rendererRef.current = new SoccerRenderer(canvasRef.current);
@@ -424,6 +431,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           </div>
         </div>
       )}
+
+      {/* 16-Bit Arcade Commentator Toast Notification */}
+      <CommentaryToastBox
+        toast={commentaryToast}
+        onDismiss={() => setCommentaryToast(null)}
+      />
     </div>
   );
 };

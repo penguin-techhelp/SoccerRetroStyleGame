@@ -2,18 +2,20 @@ import React, { useState } from 'react';
 import { Team, FormationType } from '../types/game';
 import { CLASSIC_TEAMS } from '../data/teams';
 import { retroAudio } from '../audio/retroAudio';
-import { ArrowLeft, Users, Zap, Shield, Flame, Activity } from 'lucide-react';
+import { ArrowLeft, Users, Zap, Shield, Flame, Activity, Award } from 'lucide-react';
 
 interface TeamSelectProps {
   onBack: () => void;
   onConfirmTeams: (homeTeam: Team, awayTeam: Team, twoPlayer: boolean) => void;
   isTournament?: boolean;
+  onOpenRoster?: () => void;
 }
 
 export const TeamSelect: React.FC<TeamSelectProps> = ({
   onBack,
   onConfirmTeams,
-  isTournament = false
+  isTournament = false,
+  onOpenRoster
 }) => {
   const [homeIndex, setHomeIndex] = useState(0); // Default Brazil
   const [awayIndex, setAwayIndex] = useState(1); // Default Italy
@@ -60,26 +62,54 @@ export const TeamSelect: React.FC<TeamSelectProps> = ({
           <span>MAIN MENU</span>
         </button>
 
-        <h2 className="font-pixel text-sm md:text-base text-yellow-300 tracking-wider">
-          {isTournament ? 'CHOOSE YOUR NATION' : 'TEAM SELECTION'}
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-pixel text-sm md:text-base text-yellow-300 tracking-wider">
+            {isTournament ? 'CHOOSE YOUR CLUB' : 'CLUB SELECTION'}
+          </h2>
+          {onOpenRoster && (
+            <button
+              onClick={() => {
+                retroAudio.playMenuBeep();
+                onOpenRoster();
+              }}
+              className="hidden sm:flex items-center gap-1 text-[11px] font-arcade px-2.5 py-1 bg-yellow-950/40 border border-yellow-500/70 text-yellow-300 hover:bg-yellow-900/60 cursor-pointer"
+            >
+              <Award className="w-3 h-3 text-yellow-400" />
+              <span>100 PLAYERS [PDF]</span>
+            </button>
+          )}
+        </div>
 
-        {!isTournament && (
-          <button
-            onClick={() => {
-              retroAudio.playMenuBeep();
-              setIsTwoPlayer(!isTwoPlayer);
-            }}
-            className={`px-3 py-1.5 text-xs font-arcade border flex items-center gap-1.5 transition-colors ${
-              isTwoPlayer
-                ? 'bg-sky-950 border-sky-400 text-sky-300'
-                : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>{isTwoPlayer ? '2-PLAYER LOCAL' : '1-PLAYER VS CPU'}</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onOpenRoster && (
+            <button
+              onClick={() => {
+                retroAudio.playMenuBeep();
+                onOpenRoster();
+              }}
+              className="sm:hidden flex items-center gap-1 text-[10px] font-arcade px-2 py-1 bg-yellow-950/40 border border-yellow-500/70 text-yellow-300 hover:bg-yellow-900/60 cursor-pointer"
+            >
+              <Award className="w-3 h-3 text-yellow-400" />
+              <span>ROSTER</span>
+            </button>
+          )}
+          {!isTournament && (
+            <button
+              onClick={() => {
+                retroAudio.playMenuBeep();
+                setIsTwoPlayer(!isTwoPlayer);
+              }}
+              className={`px-3 py-1.5 text-xs font-arcade border flex items-center gap-1.5 transition-colors cursor-pointer ${
+                isTwoPlayer
+                  ? 'bg-sky-950 border-sky-400 text-sky-300'
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>{isTwoPlayer ? '2-PLAYER' : 'VS CPU'}</span>
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Main Content */}

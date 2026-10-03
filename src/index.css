@@ -70,3 +70,22 @@
   background: #22c55e;
   border: 1px solid #14532d;
 }
+
+@keyframes arcade-toast-slide {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.96);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-arcade-toast {
+  animation: arcade-toast-slide 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}

@@ -1,6 +1,7 @@
-import { Ball, BannerMessage, FormationType, GoalEvent, MatchSettings, MatchStats, Player, PlayerActionState, ReplayFrame, Team } from '../types/game';
+import { Ball, BannerMessage, CommentaryToast, FormationType, GoalEvent, HighlightClip, MatchSettings, MatchStats, Player, PlayerActionState, ReplayFrame, Team } from '../types/game';
 import { FORMATION_COORDS } from '../data/teams';
 import { retroAudio } from '../audio/retroAudio';
+import { generateCommentaryToast } from './commentary';
 
 export const PITCH_WIDTH = 1900;
 export const PITCH_HEIGHT = 1150;
@@ -13,6 +14,29 @@ export interface NetPoint {
   y: number;
   vx: number;
   vy: number;
+}
+
+export interface WeatherParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  alpha: number;
+  len?: number;
+  swayPhase?: number;
+  swaySpeed?: number;
+}
+
+export interface TurfSplashParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
 }
 
 export class SoccerGameEngine {
@@ -77,16 +101,40 @@ export class SoccerGameEngine {
   public goalEvents: GoalEvent[] = [];
   public activeMessage: BannerMessage | null = null;
 
-  // Replay ring buffer
-  private replayBuffer: ReplayFrame[] = [];
-  private maxReplayFrames = 300;
+  // Player Stats Tracking State
+  public lastShooterId: string | null = null;
+  public lastPasserId: string | null = null;
+  public lastPasserTeamId: string | null = null;
+  public lastPossessorId: string | null = null;
+
+  // Replay ring buffer and Highlight Reel
+  public replayBuffer: ReplayFrame[] = [];
+  public highlights: HighlightClip[] = [];
+  private maxReplayFrames = 450;
+  private lastHighlightTime = -999;
+
+  // 16-Bit Arcade Commentator Event Callback
+  public onCommentaryEvent?: (toast: CommentaryToast) => void;
+
+  public emitCommentary(
+    type: CommentaryToast['type'],
+    teamName: string,
+    teamFlag: string,
+    minute: number,
+    playerName?: string,
+    assistName?: string
+  ) {
+    const toast = generateCommentaryToast(type, teamName, teamFlag, minute, playerName, assistName);
+    this.onCommentaryEvent?.(toast);
+  }
 
   // Net simulation
   public leftNetMesh: NetPoint[][] = [];
   public rightNetMesh: NetPoint[][] = [];
 
-  // Weather particles
-  private rainDrops: { x: number; y: number; speed: number; len: number }[] = [];
+  // Weather particles & turf interaction
+  public weatherParticles: WeatherParticle[] = [];
+  public turfSplashes: TurfSplashParticle[] = [];
 
   // Corner flags
   public flagWaveTimer = 0;
@@ -126,16 +174,55 @@ export class SoccerGameEngine {
   }
 
   private initWeather() {
-    this.rainDrops = [];
+    this.weatherParticles = [];
+    this.turfSplashes = [];
+
     if (this.settings.weather === 'rain') {
-      for (let i = 0; i < 220; i++) {
-        this.rainDrops.push({
+      // 280 diagonal falling rain streaks
+      for (let i = 0; i < 280; i++) {
+        this.weatherParticles.push({
           x: Math.random() * PITCH_WIDTH,
           y: Math.random() * PITCH_HEIGHT,
-          speed: 16 + Math.random() * 8,
-          len: 12 + Math.random() * 8
+          vx: -3.5 - Math.random() * 2,
+          vy: 18 + Math.random() * 7,
+          len: 14 + Math.random() * 8,
+          size: 1.2,
+          alpha: 0.45 + Math.random() * 0.4
         });
       }
+    } else if (this.settings.weather === 'snow') {
+      // 240 drifting snowflakes with sway
+      for (let i = 0; i < 240; i++) {
+        this.weatherParticles.push({
+          x: Math.random() * PITCH_WIDTH,
+          y: Math.random() * PITCH_HEIGHT,
+          vx: 0,
+          vy: 1.5 + Math.random() * 2.2,
+          size: 2 + Math.random() * 3,
+          alpha: 0.6 + Math.random() * 0.4,
+          swayPhase: Math.random() * Math.PI * 2,
+          swaySpeed: 0.03 + Math.random() * 0.035
+        });
+      }
+    }
+  }
+
+  public spawnTurfEffect(x: number, y: number, count: number = 3, forceType?: 'rain' | 'snow') {
+    const weather = forceType || this.settings.weather;
+    if (weather !== 'rain' && weather !== 'snow') return;
+
+    const isSnow = weather === 'snow';
+    for (let i = 0; i < count; i++) {
+      this.turfSplashes.push({
+        x: x + (Math.random() - 0.5) * 8,
+        y: y + (Math.random() - 0.5) * 6,
+        vx: (Math.random() - 0.5) * (isSnow ? 3.2 : 5.0),
+        vy: -(Math.random() * (isSnow ? 2.2 : 3.8) + 0.5),
+        life: isSnow ? 18 + Math.random() * 10 : 12 + Math.random() * 8,
+        maxLife: isSnow ? 28 : 20,
+        color: isSnow ? 'rgba(255, 255, 255, 0.95)' : 'rgba(180, 220, 255, 0.8)',
+        size: isSnow ? 2.5 + Math.random() * 2.5 : 1.5 + Math.random() * 2
+      });
     }
   }
 
@@ -185,6 +272,8 @@ export class SoccerGameEngine {
         vy: 0,
         targetX: startX,
         targetY: startY,
+        stats: tmpl.stats,
+        matchStats: { goals: 0, assists: 0, tackles: 0, shots: 0 },
         stamina: 100,
         maxStamina: 100,
         facingAngle: 0,
@@ -213,6 +302,8 @@ export class SoccerGameEngine {
         vy: 0,
         targetX: startX,
         targetY: startY,
+        stats: tmpl.stats,
+        matchStats: { goals: 0, assists: 0, tackles: 0, shots: 0 },
         stamina: 100,
         maxStamina: 100,
         facingAngle: Math.PI,
@@ -325,7 +416,7 @@ export class SoccerGameEngine {
     else this.userControlledPlayerAway = bestPlayer;
   }
 
-  public triggerGoal(scoringTeamId: string, shooterName: string, shooterNumber: number) {
+  public triggerGoal(scoringTeamId: string, shooterName: string, shooterNumber: number, shooterId?: string) {
     this.playState = 'goal';
     this.stateTimer = 220; // Celebrate for ~3.5 seconds
 
@@ -338,14 +429,40 @@ export class SoccerGameEngine {
       this.awayStats.goals++;
     }
 
+    const allPlayers = [...this.homePlayers, ...this.awayPlayers];
+    const scorer = allPlayers.find((p) => p.id === shooterId) ||
+      allPlayers.find((p) => p.name === shooterName && p.teamId === scoringTeamId) ||
+      (isHome ? this.homePlayers[9] : this.awayPlayers[9]);
+
+    // Record goal on player
+    scorer.matchStats.goals++;
+
+    // Check for assist
+    let assistPlayer: Player | undefined;
+    if (this.lastPasserId && this.lastPasserId !== scorer.id && this.lastPasserTeamId === scoringTeamId) {
+      assistPlayer = allPlayers.find((p) => p.id === this.lastPasserId);
+      if (assistPlayer) {
+        assistPlayer.matchStats.assists++;
+      }
+    }
+
     const currentMinute = Math.min(90, Math.floor((this.matchClock / (this.settings.halfLengthSeconds * 2)) * 90) + 1);
     this.goalEvents.push({
       minute: currentMinute,
-      scorerName: shooterName,
-      scorerNumber: shooterNumber,
+      scorerId: scorer.id,
+      scorerName: scorer.name,
+      scorerNumber: scorer.number,
+      assistId: assistPlayer?.id,
+      assistName: assistPlayer?.name,
+      assistNumber: assistPlayer?.number,
       teamId: scoringTeamId,
       teamName: isHome ? this.homeTeam.name : this.awayTeam.name
     });
+
+    // Reset touch trackers
+    this.lastPasserId = null;
+    this.lastPasserTeamId = null;
+    this.lastShooterId = null;
 
     // Net bulge impulse
     if (isHome) {
@@ -365,7 +482,10 @@ export class SoccerGameEngine {
     }
 
     retroAudio.playGoalCelebration();
-    this.showMessage('GOOOOAAAL!', `${shooterName.toUpperCase()} #${shooterNumber}`, 'goal', 200);
+    const bannerSubtext = assistPlayer
+      ? `${scorer.name.toUpperCase()} #${scorer.number} · AST: ${assistPlayer.name.toUpperCase()}`
+      : `${scorer.name.toUpperCase()} #${scorer.number}`;
+    this.showMessage('GOOOOAAAL!', bannerSubtext, 'goal', 200);
 
     // Scoring team celebrates
     const scorers = isHome ? this.homePlayers : this.awayPlayers;
@@ -373,6 +493,26 @@ export class SoccerGameEngine {
       p.state = 'celebrating';
       p.stateTimer = 180;
     });
+
+    // Capture Highlight Clip for Highlight Reel
+    this.captureHighlight(
+      `GOAL: ${scorer.name.toUpperCase()} (${scorer.number})`,
+      assistPlayer ? `Assisted by ${assistPlayer.name} (#${assistPlayer.number})` : `Clinical strike into the net!`,
+      'goal',
+      isHome ? this.homeTeam.name : this.awayTeam.name,
+      100 + this.homeScore + this.awayScore,
+      200
+    );
+
+    // Emit Arcade Commentator Toast
+    this.emitCommentary(
+      'goal',
+      isHome ? this.homeTeam.name : this.awayTeam.name,
+      isHome ? this.homeTeam.flag : this.awayTeam.flag,
+      currentMinute,
+      scorer.name,
+      assistPlayer?.name
+    );
 
     // Crowd flashbulbs frenzy
     for (let i = 0; i < 20; i++) {
@@ -382,6 +522,68 @@ export class SoccerGameEngine {
         life: 5 + Math.random() * 10
       });
     }
+  }
+
+  public captureHighlight(
+    title: string,
+    description: string,
+    type: 'goal' | 'save' | 'woodwork',
+    teamName: string,
+    importanceScore: number,
+    frameCount: number = 200
+  ) {
+    if (this.replayBuffer.length < 20) return;
+    // Prevent duplicate clip spam within 150 frames (2.5 seconds) unless it is a goal
+    if (type !== 'goal' && this.replayBuffer.length - this.lastHighlightTime < 150) return;
+    this.lastHighlightTime = this.replayBuffer.length;
+
+    const currentMinute = Math.min(90, Math.floor((this.matchClock / (this.settings.halfLengthSeconds * 2)) * 90) + 1);
+    const framesToCapture = this.replayBuffer.slice(-Math.min(frameCount, this.replayBuffer.length));
+
+    const clip: HighlightClip = {
+      id: `hl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      title,
+      description,
+      minute: currentMinute,
+      type,
+      teamName,
+      frames: framesToCapture,
+      importanceScore
+    };
+
+    this.highlights.push(clip);
+  }
+
+  public getTopHighlights(limit: number = 3): HighlightClip[] {
+    const sorted = [...this.highlights].sort((a, b) => b.importanceScore - a.importanceScore);
+    if (sorted.length >= limit) {
+      return sorted.slice(0, limit);
+    }
+
+    // If fewer than requested, create supplementary clips from replay buffer
+    if (this.replayBuffer.length > 30) {
+      const needed = limit - sorted.length;
+      for (let i = 0; i < needed; i++) {
+        const segLen = Math.min(180, Math.max(40, Math.floor(this.replayBuffer.length / (needed + 1))));
+        const start = Math.max(0, this.replayBuffer.length - (i + 1) * segLen);
+        const subFrames = this.replayBuffer.slice(start, start + segLen);
+        if (subFrames.length > 20) {
+          const isHomeEvent = i % 2 === 0;
+          sorted.push({
+            id: `hl_sub_${i}`,
+            title: i === 0 ? 'DANGEROUS ATTACKING OPPORTUNITY' : 'FAST-BREAK COUNTER ATTACK',
+            description: 'Intense pressure and slick ball movement deep in opposition territory',
+            minute: Math.max(1, Math.min(90, Math.floor((i + 1) * 26))),
+            type: 'save',
+            teamName: isHomeEvent ? this.homeTeam.name : this.awayTeam.name,
+            frames: subFrames,
+            importanceScore: 50 - i * 10
+          });
+        }
+      }
+    }
+
+    return sorted.slice(0, limit);
   }
 
   // --- Main Update Loop (Called at 60 FPS) ---
@@ -472,16 +674,51 @@ export class SoccerGameEngine {
     // Net Spring Physics
     this.updateNetPhysics();
 
-    // Weather simulation
+    // Weather simulation (Rain and Snow particles)
     if (this.settings.weather === 'rain') {
-      this.rainDrops.forEach((d) => {
-        d.y += d.speed;
-        d.x -= 2;
-        if (d.y > PITCH_HEIGHT) {
-          d.y = 0;
-          d.x = Math.random() * PITCH_WIDTH;
+      this.weatherParticles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.y > PITCH_HEIGHT) {
+          p.y = 0;
+          p.x = Math.random() * PITCH_WIDTH;
+          // Spawn turf splash puddle ripple occasionally
+          if (Math.random() < 0.08) {
+            this.spawnTurfEffect(p.x, Math.random() * PITCH_HEIGHT, 1, 'rain');
+          }
         }
       });
+    } else if (this.settings.weather === 'snow') {
+      this.weatherParticles.forEach((p) => {
+        if (p.swayPhase !== undefined && p.swaySpeed !== undefined) {
+          p.swayPhase += p.swaySpeed;
+          p.x += Math.sin(p.swayPhase) * 1.5 - 0.4;
+        }
+        p.y += p.vy;
+        if (p.y > PITCH_HEIGHT) {
+          p.y = 0;
+          p.x = Math.random() * PITCH_WIDTH;
+        }
+      });
+    }
+
+    // Update Turf Sprays and Splashes
+    if (this.turfSplashes.length > 0) {
+      this.turfSplashes.forEach((s) => {
+        s.x += s.vx;
+        s.y += s.vy;
+        s.vy += 0.12; // gravity on water/snow particles
+        s.life--;
+      });
+      this.turfSplashes = this.turfSplashes.filter((s) => s.life > 0);
+    }
+
+    // Ball rolling spray in wet/snowy conditions
+    if (this.ball.z <= 1) {
+      const ballSpeed = Math.hypot(this.ball.vx, this.ball.vy);
+      if (ballSpeed > 3.0 && (this.settings.weather === 'rain' || this.settings.weather === 'snow')) {
+        this.spawnTurfEffect(this.ball.x, this.ball.y, 1);
+      }
     }
 
     // Flashbulbs
@@ -617,6 +854,8 @@ export class SoccerGameEngine {
   private executePass(passer: Player, power: number) {
     this.ball.ownerId = null;
     this.ball.lastTouchTeamId = passer.teamId;
+    this.lastPasserId = passer.id;
+    this.lastPasserTeamId = passer.teamId;
     passer.state = 'kicking';
     passer.stateTimer = 15;
 
@@ -667,6 +906,8 @@ export class SoccerGameEngine {
   private executeShot(shooter: Player, power: number) {
     this.ball.ownerId = null;
     this.ball.lastTouchTeamId = shooter.teamId;
+    this.lastShooterId = shooter.id;
+    shooter.matchStats.shots++;
     shooter.state = 'kicking';
     shooter.stateTimer = 20;
 
@@ -702,8 +943,23 @@ export class SoccerGameEngine {
 
   private executeSlideTackle(player: Player) {
     player.state = 'sliding';
-    player.stateTimer = 35;
-    const slideSpeed = 8.5 + (player.stats.tackle / 100) * 3;
+
+    // Weather impact on slide distance and duration
+    let slideSpeedMult = 1.0;
+    let slideTimerDuration = 35;
+    if (this.settings.weather === 'rain') {
+      slideSpeedMult = 1.25; // Skids further on slick wet grass!
+      slideTimerDuration = 42;
+      this.spawnTurfEffect(player.x, player.y, 6, 'rain');
+    } else if (this.settings.weather === 'snow') {
+      slideSpeedMult = 0.92; // Plows through snow resistance
+      slideTimerDuration = 32;
+      this.spawnTurfEffect(player.x, player.y, 8, 'snow');
+    }
+
+    player.stateTimer = slideTimerDuration;
+    const baseTackleSpeed = 8.5 + (player.stats.tackle / 100) * 3;
+    const slideSpeed = baseTackleSpeed * slideSpeedMult;
     player.vx = Math.cos(player.facingAngle) * slideSpeed;
     player.vy = Math.sin(player.facingAngle) * slideSpeed;
     retroAudio.playSlide();
@@ -723,6 +979,7 @@ export class SoccerGameEngine {
             // Clean dispossession
             this.ball.ownerId = null;
             this.ball.lastTouchTeamId = player.teamId;
+            player.matchStats.tackles++;
             this.ball.vx = player.vx * 0.8 + (Math.random() - 0.5) * 4;
             this.ball.vy = player.vy * 0.8 + (Math.random() - 0.5) * 4;
             opp.state = 'tackled';
@@ -746,18 +1003,25 @@ export class SoccerGameEngine {
     if (fouler.teamId === this.homeTeam.id) this.homeStats.fouls++;
     else this.awayStats.fouls++;
 
+    const currentMinute = Math.min(90, Math.floor((this.matchClock / (this.settings.halfLengthSeconds * 2)) * 90) + 1);
+    const foulerTeam = fouler.teamId === this.homeTeam.id ? this.homeTeam : this.awayTeam;
+
     const isSevere = Math.random() < 0.45;
     if (isSevere) {
-      fouler.yellowCards++;
-      if (fouler.yellowCards >= 2) {
+      const isStraightRed = Math.random() < 0.22 && fouler.yellowCards === 0;
+      if (isStraightRed || fouler.yellowCards >= 1) {
         fouler.hasRedCard = true;
+        fouler.yellowCards = Math.max(fouler.yellowCards, 1);
         if (fouler.teamId === this.homeTeam.id) this.homeStats.redCards++;
         else this.awayStats.redCards++;
         this.showMessage('RED CARD!', `${fouler.name.toUpperCase()} SENT OFF`, 'red_card', 160);
+        this.emitCommentary('red_card', foulerTeam.name, foulerTeam.flag, currentMinute, fouler.name);
       } else {
+        fouler.yellowCards++;
         if (fouler.teamId === this.homeTeam.id) this.homeStats.yellowCards++;
         else this.awayStats.yellowCards++;
         this.showMessage('YELLOW CARD', `${fouler.name.toUpperCase()} BOOKED`, 'yellow_card', 140);
+        this.emitCommentary('yellow_card', foulerTeam.name, foulerTeam.flag, currentMinute, fouler.name);
       }
     } else {
       this.showMessage('REFEREE WHISTLE', 'FOUL AWARDED', 'foul', 100);
@@ -906,6 +1170,19 @@ export class SoccerGameEngine {
 
         retroAudio.playCrowdGasp();
         this.showMessage('WHAT A SAVE!', `${gk.name.toUpperCase()} PUSHES IT AWAY!`, 'save', 90);
+
+        this.captureHighlight(
+          `HEROIC SAVE: ${gk.name.toUpperCase()}`,
+          `Acrobatic diving stop by ${gk.name} (#${gk.number}) denies goal!`,
+          'save',
+          gk.teamId === this.homeTeam.id ? this.homeTeam.name : this.awayTeam.name,
+          85,
+          180
+        );
+
+        const currentMinute = Math.min(90, Math.floor((this.matchClock / (this.settings.halfLengthSeconds * 2)) * 90) + 1);
+        const keeperTeam = gk.teamId === this.homeTeam.id ? this.homeTeam : this.awayTeam;
+        this.emitCommentary('save', keeperTeam.name, keeperTeam.flag, currentMinute, gk.name);
       }
     }
   }
@@ -968,8 +1245,24 @@ export class SoccerGameEngine {
     this.ball.spinX *= 0.98;
     this.ball.spinY *= 0.98;
 
-    // Friction & Air drag
-    const friction = this.ball.z > 0 ? 0.992 : 0.975;
+    // Weather-dependent Friction & Bounce Elasticity
+    let groundFriction = 0.975;
+    let bounceRestitution = 0.58;
+
+    if (this.settings.weather === 'rain') {
+      // Slick wet pitch: ball skids faster across ground (less rolling friction), but vertical bounce is lower & damp
+      groundFriction = 0.986;
+      bounceRestitution = 0.42;
+    } else if (this.settings.weather === 'snow') {
+      // Heavy cold snowpack: ball slows down quickly due to snow drag, low dead bounce
+      groundFriction = 0.955;
+      bounceRestitution = 0.35;
+    } else if (this.settings.weather === 'night') {
+      groundFriction = 0.978;
+      bounceRestitution = 0.55;
+    }
+
+    const friction = this.ball.z > 0 ? 0.992 : groundFriction;
     this.ball.vx *= friction;
     this.ball.vy *= friction;
 
@@ -980,7 +1273,11 @@ export class SoccerGameEngine {
       // Ground bounce
       this.ball.z = 0;
       if (Math.abs(this.ball.vz) > 1.2) {
-        this.ball.vz = -this.ball.vz * 0.58;
+        this.ball.vz = -this.ball.vz * bounceRestitution;
+        // Spawn ground impact splash / snow puff on bounce
+        if (this.settings.weather === 'rain' || this.settings.weather === 'snow') {
+          this.spawnTurfEffect(this.ball.x, this.ball.y, 4);
+        }
         retroAudio.playKick(0.2);
       } else {
         this.ball.vz = 0;
@@ -999,8 +1296,10 @@ export class SoccerGameEngine {
     // Right Goal (Away goal defended by Away Team)
     if (this.ball.x >= PITCH_WIDTH - 40 && this.ball.y >= GOAL_Y_MIN && this.ball.y <= GOAL_Y_MAX && this.ball.z <= 70) {
       if (this.playState === 'in_play') {
-        const lastScorer = this.homePlayers.find((p) => p.id === this.userControlledPlayerHome?.id) || this.homePlayers[9];
-        this.triggerGoal(this.homeTeam.id, lastScorer.name, lastScorer.number);
+        const lastScorer = (this.lastShooterId && this.homePlayers.find((p) => p.id === this.lastShooterId)) ||
+          this.homePlayers.find((p) => p.id === this.userControlledPlayerHome?.id) ||
+          this.homePlayers[9];
+        this.triggerGoal(this.homeTeam.id, lastScorer.name, lastScorer.number, lastScorer.id);
       }
       this.ball.vx = Math.min(0, this.ball.vx * -0.3); // Bounce off net
       return;
@@ -1009,8 +1308,10 @@ export class SoccerGameEngine {
     // Left Goal (Home goal defended by Home Team)
     if (this.ball.x <= 40 && this.ball.y >= GOAL_Y_MIN && this.ball.y <= GOAL_Y_MAX && this.ball.z <= 70) {
       if (this.playState === 'in_play') {
-        const lastScorer = this.awayPlayers.find((p) => p.id === this.userControlledPlayerAway?.id) || this.awayPlayers[9];
-        this.triggerGoal(this.awayTeam.id, lastScorer.name, lastScorer.number);
+        const lastScorer = (this.lastShooterId && this.awayPlayers.find((p) => p.id === this.lastShooterId)) ||
+          this.awayPlayers.find((p) => p.id === this.userControlledPlayerAway?.id) ||
+          this.awayPlayers[9];
+        this.triggerGoal(this.awayTeam.id, lastScorer.name, lastScorer.number, lastScorer.id);
       }
       this.ball.vx = Math.max(0, this.ball.vx * -0.3);
       return;
@@ -1051,6 +1352,19 @@ export class SoccerGameEngine {
         this.ball.vy = -this.ball.vy * 0.75 + (Math.random() - 0.5) * 4;
         retroAudio.playPostClang();
         this.showMessage('OFF THE POST!', 'CLATTERING WOODWORK', 'save', 70);
+
+        this.captureHighlight(
+          'OFF THE WOODWORK!',
+          'Thunderous rocket strike rattles the goal frame!',
+          'woodwork',
+          this.ball.lastTouchTeamId === this.homeTeam.id ? this.homeTeam.name : this.awayTeam.name,
+          80,
+          180
+        );
+
+        const currentMinute = Math.min(90, Math.floor((this.matchClock / (this.settings.halfLengthSeconds * 2)) * 90) + 1);
+        const hittingTeam = this.ball.lastTouchTeamId === this.homeTeam.id ? this.homeTeam : this.awayTeam;
+        this.emitCommentary('woodwork', hittingTeam.name, hittingTeam.flag, currentMinute);
       }
     });
   }
@@ -1070,6 +1384,16 @@ export class SoccerGameEngine {
           // Take possession
           this.ball.ownerId = p.id;
           this.ball.lastTouchTeamId = p.teamId;
+
+          // Track possessor and assists sequence
+          if (this.lastPossessorId !== p.id) {
+            // If opposition intercepted, clear assist chain
+            if (this.lastPasserTeamId && this.lastPasserTeamId !== p.teamId) {
+              this.lastPasserId = null;
+              this.lastPasserTeamId = null;
+            }
+            this.lastPossessorId = p.id;
+          }
 
           // If human controlled, set as active
           if (p.teamId === this.homeTeam.id) {

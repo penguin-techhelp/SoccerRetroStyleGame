@@ -1,5 +1,5 @@
 import { PITCH_WIDTH, PITCH_HEIGHT, GOAL_Y_MIN, GOAL_Y_MAX, SoccerGameEngine } from './engine';
-import { Player } from '../types/game';
+import { Player, ReplayFrame } from '../types/game';
 
 export class SoccerRenderer {
   private canvas: HTMLCanvasElement;
@@ -135,17 +135,46 @@ export class SoccerRenderer {
   // --- Pitch Lawn & Markings ---
   private drawPitchSurface(engine: SoccerGameEngine) {
     const ctx = this.ctx;
+    const weather = engine.settings.weather;
 
-    // Grass stripes (alternating greens)
+    // Grass stripes (alternating greens based on weather conditions)
     const stripeWidth = 95;
     for (let x = 0; x < PITCH_WIDTH; x += stripeWidth) {
       const isEven = Math.floor(x / stripeWidth) % 2 === 0;
-      ctx.fillStyle = isEven ? '#15803d' : '#16a34a';
+
+      if (weather === 'snow') {
+        // Cold frosted winter turf
+        ctx.fillStyle = isEven ? '#335e49' : '#3c6e56';
+      } else if (weather === 'rain') {
+        // Wet saturated slick turf
+        ctx.fillStyle = isEven ? '#125c2d' : '#166c35';
+      } else {
+        // Crisp standard sunny/night lawn
+        ctx.fillStyle = isEven ? '#15803d' : '#16a34a';
+      }
       ctx.fillRect(x, 0, stripeWidth, PITCH_HEIGHT);
     }
 
+    // Snow Dusting along sidelines and behind goals
+    if (weather === 'snow') {
+      ctx.fillStyle = 'rgba(240, 248, 255, 0.45)';
+      // Top and bottom touchline snow edges
+      ctx.fillRect(0, 0, PITCH_WIDTH, 42);
+      ctx.fillRect(0, PITCH_HEIGHT - 42, PITCH_WIDTH, 42);
+      // Left and right goal side snow dust
+      ctx.fillRect(0, 0, 42, PITCH_HEIGHT);
+      ctx.fillRect(PITCH_WIDTH - 42, 0, 42, PITCH_HEIGHT);
+
+      // Frosty patches in corner arcs
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.fillRect(40, 40, 30, 20);
+      ctx.fillRect(PITCH_WIDTH - 70, 40, 30, 20);
+      ctx.fillRect(40, PITCH_HEIGHT - 60, 30, 20);
+      ctx.fillRect(PITCH_WIDTH - 70, PITCH_HEIGHT - 60, 30, 20);
+    }
+
     // White Pitch Lines
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = weather === 'snow' ? '#ffffff' : '#ffffff';
     ctx.lineWidth = 4;
     ctx.lineCap = 'square';
 
@@ -500,20 +529,21 @@ export class SoccerRenderer {
   private drawBall(engine: SoccerGameEngine) {
     const ctx = this.ctx;
     const b = engine.ball;
+    const isSnow = engine.settings.weather === 'snow';
     const ballScreenY = b.y - b.z; // 3D height offset
 
     ctx.save();
     ctx.translate(b.x, ballScreenY);
     ctx.rotate(b.rotationAngle);
 
-    // Ball Body
-    ctx.fillStyle = '#ffffff';
+    // Ball Body (Classic 90s High-Visibility Orange ball in snow matches!)
+    ctx.fillStyle = isSnow ? '#f97316' : '#ffffff';
     ctx.beginPath();
     ctx.arc(0, 0, 6, 0, Math.PI * 2);
     ctx.fill();
 
     // 16-bit 32-Panel Pentagons
-    ctx.fillStyle = '#090d16';
+    ctx.fillStyle = isSnow ? '#0f172a' : '#090d16';
     ctx.beginPath();
     ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
     ctx.fill();
@@ -526,23 +556,39 @@ export class SoccerRenderer {
     ctx.restore();
   }
 
-  // --- Weather Simulation (Rain streaks & Night floodlight ambiance) ---
+  // --- Weather Simulation (Rain streaks, Snow flakes, Turf splashes & Night floodlights) ---
   private drawWeather(engine: SoccerGameEngine) {
     const ctx = this.ctx;
+    const weather = engine.settings.weather;
 
-    if (engine.settings.weather === 'rain') {
-      ctx.strokeStyle = 'rgba(200, 230, 255, 0.45)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      // Render rain
-      for (let i = 0; i < 180; i++) {
-        const rx = (i * 97) % PITCH_WIDTH;
-        const ry = ((i * 131) + Date.now() * 0.8) % PITCH_HEIGHT;
-        ctx.moveTo(rx, ry);
-        ctx.lineTo(rx - 4, ry + 14);
-      }
-      ctx.stroke();
-    } else if (engine.settings.weather === 'night') {
+    // 1. Draw Ground Turf Sprays & Puddle Splashes
+    if (engine.turfSplashes.length > 0) {
+      engine.turfSplashes.forEach((s) => {
+        const alpha = Math.max(0, s.life / s.maxLife);
+        ctx.fillStyle = s.color.replace('0.8', `${alpha * 0.8}`).replace('0.95', `${alpha * 0.95}`);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size * (1 + (1 - alpha) * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    // 2. Draw Falling Weather Particles (Rain / Snow)
+    if (weather === 'rain') {
+      ctx.lineWidth = 1.4;
+      engine.weatherParticles.forEach((p) => {
+        ctx.strokeStyle = `rgba(195, 225, 255, ${p.alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + (p.vx || -4) * 0.9, p.y + (p.vy || 20) * 0.9);
+        ctx.stroke();
+      });
+    } else if (weather === 'snow') {
+      engine.weatherParticles.forEach((p) => {
+        ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+        // Pixelated snowflake squares
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+      });
+    } else if (weather === 'night') {
       // Dark night atmospheric tint
       ctx.fillStyle = 'rgba(2, 6, 23, 0.28)';
       ctx.fillRect(-100, -100, PITCH_WIDTH + 200, PITCH_HEIGHT + 200);
@@ -694,5 +740,169 @@ export class SoccerRenderer {
       ctx.fillStyle = isGoal ? '#451a03' : '#94a3b8';
       ctx.fillText(msg.subtext, w / 2, bannerY + 54);
     }
+  }
+
+  public renderHighlightFrame(
+    engine: SoccerGameEngine,
+    frame: ReplayFrame,
+    width: number,
+    height: number,
+    clipTitle: string,
+    clipMinute: number,
+    clipType: 'goal' | 'save' | 'woodwork',
+    isSlowMo: boolean,
+    clipIndex: number,
+    totalClips: number,
+    progress: number
+  ) {
+    this.canvas.width = width;
+    this.canvas.height = height;
+    const ctx = this.ctx;
+    ctx.imageSmoothingEnabled = false;
+
+    // Apply frame positions to engine objects
+    engine.ball.x = frame.ball.x;
+    engine.ball.y = frame.ball.y;
+    engine.ball.z = frame.ball.z;
+
+    const all = [...engine.homePlayers, ...engine.awayPlayers];
+    frame.players.forEach((fp) => {
+      const p = all.find((pl) => pl.id === fp.id);
+      if (p) {
+        p.x = fp.x;
+        p.y = fp.y;
+        p.facingAngle = fp.facingAngle;
+        p.state = fp.state;
+        p.animFrame = fp.animFrame;
+      }
+    });
+
+    engine.cameraX = frame.ball.x;
+    engine.cameraY = frame.ball.y;
+
+    const zoom = Math.min(width / 750, height / 450);
+    const camX = engine.cameraX;
+    const camY = engine.cameraY;
+
+    ctx.save();
+    ctx.translate(width / 2, height / 2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-camX, -camY);
+
+    // 1. Stands & perimeter
+    this.drawStadiumPerimeter(engine);
+    // 2. Pitch
+    this.drawPitchSurface(engine);
+    // 3. Goal nets
+    this.drawGoalLeft(engine);
+    this.drawGoalRight(engine);
+    // 4. Flags
+    this.drawCornerFlags(engine);
+    // 5. Shadows
+    this.drawShadows(engine);
+
+    // 6. Players sorted by Y
+    const sortedPlayers = [...engine.homePlayers, ...engine.awayPlayers].sort((a, b) => a.y - b.y);
+    sortedPlayers.forEach((p) => {
+      this.drawPlayerSprite(p, engine);
+    });
+
+    // 7. Ball
+    this.drawBall(engine);
+
+    // 8. Weather
+    this.drawWeather(engine);
+
+    ctx.restore();
+
+    // 9. Retro Highlight Broadcast Overlay (16-bit TV style)
+    this.drawHighlightOSD(width, height, clipTitle, clipMinute, clipType, isSlowMo, clipIndex, totalClips, progress);
+  }
+
+  private drawHighlightOSD(
+    w: number,
+    h: number,
+    title: string,
+    minute: number,
+    type: 'goal' | 'save' | 'woodwork',
+    isSlowMo: boolean,
+    clipIndex: number,
+    totalClips: number,
+    progress: number
+  ) {
+    const ctx = this.ctx;
+
+    // Scanlines effect for CRT television look
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+    for (let y = 0; y < h; y += 4) {
+      ctx.fillRect(0, y, w, 1.5);
+    }
+
+    // Top Broadcast Bar
+    ctx.fillStyle = 'rgba(2, 6, 23, 0.90)';
+    ctx.fillRect(0, 0, w, 28);
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(0, 27, w, 1.5);
+
+    // Blinking REC dot
+    const blink = Math.floor(Date.now() / 350) % 2 === 0;
+    if (blink) {
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(14, 14, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('REC ● HIGHLIGHT', 24, 18);
+
+    // Moment indicator
+    ctx.fillStyle = '#fde047';
+    ctx.textAlign = 'center';
+    ctx.fillText(`MOMENT ${clipIndex + 1} OF ${totalClips}`, w / 2, 18);
+
+    // Channel / Time
+    ctx.fillStyle = '#38bdf8';
+    ctx.textAlign = 'right';
+    ctx.fillText(`CH-94 · ${minute}'`, w - 12, 18);
+
+    // Bottom Lower-Third Banner
+    const bannerH = 34;
+    const bannerY = h - bannerH - 8;
+
+    ctx.fillStyle = 'rgba(2, 6, 23, 0.92)';
+    ctx.fillRect(8, bannerY, w - 16, bannerH);
+    ctx.strokeStyle = type === 'goal' ? '#eab308' : type === 'save' ? '#22c55e' : '#38bdf8';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(8, bannerY, w - 16, bannerH);
+
+    // Type icon/tag
+    const typeLabel = type === 'goal' ? '⚽ GOAL' : type === 'save' ? '🧤 GREAT SAVE' : '🥅 WOODWORK';
+    const tagColor = type === 'goal' ? '#eab308' : type === 'save' ? '#22c55e' : '#38bdf8';
+    ctx.fillStyle = tagColor;
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(typeLabel, 16, bannerY + 13);
+
+    // Title
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '9px "Press Start 2P", monospace';
+    const displayTitle = title.length > 26 ? title.substring(0, 24) + '...' : title;
+    ctx.fillText(displayTitle, 16, bannerY + 27);
+
+    // Slow-mo badge
+    if (isSlowMo) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.textAlign = 'right';
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.fillText('[0.5X SLOW-MO]', w - 16, bannerY + 21);
+    }
+
+    // Progress Scrubber Bar at very bottom
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, h - 5, w, 5);
+    ctx.fillStyle = type === 'goal' ? '#fde047' : type === 'save' ? '#22c55e' : '#38bdf8';
+    ctx.fillRect(0, h - 5, Math.max(0, Math.min(w, w * progress)), 5);
   }
 }
