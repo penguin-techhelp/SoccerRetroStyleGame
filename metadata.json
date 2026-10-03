@@ -1,0 +1,6 @@
+{
+  "name": "Retro Striker '94: 16-Bit Arcade Soccer",
+  "description": "Classic 16-bit arcade soccer featuring authentic pitch physics, retro pixel graphics, slide tackles, World Cup tournament mode, local 2-player, and chiptune sound.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
