@@ -4,7 +4,8 @@ import { SoccerRenderer } from '../game/renderer';
 import { MatchSettings, Team, CommentaryToast } from '../types/game';
 import { retroAudio } from '../audio/retroAudio';
 import { CommentaryToastBox } from './CommentaryToastBox';
-import { Pause, Play, RotateCcw, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
+import { LiveMatchHUD, LiveStatsData, HUDViewMode } from './LiveMatchHUD';
+import { Pause, Play, RotateCcw, Volume2, VolumeX, ArrowLeft, BarChart2 } from 'lucide-react';
 
 interface GameCanvasProps {
   homeTeam: Team;
@@ -33,6 +34,33 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [commentaryToast, setCommentaryToast] = useState<CommentaryToast | null>(null);
+
+  // Live Match Stats HUD State
+  const [hudMode, setHudMode] = useState<HUDViewMode>('compact');
+  const [liveStats, setLiveStats] = useState<LiveStatsData>({
+    homePossPct: 50,
+    awayPossPct: 50,
+    homeShots: 0,
+    awayShots: 0,
+    homeShotsOnTarget: 0,
+    awayShotsOnTarget: 0,
+    homeFouls: 0,
+    awayFouls: 0,
+    homeYellowCards: 0,
+    awayYellowCards: 0,
+    homeRedCards: 0,
+    awayRedCards: 0,
+  });
+  const frameCountRef = useRef(0);
+
+  const cycleHudMode = useCallback(() => {
+    setHudMode((prev) => {
+      if (prev === 'compact') return 'expanded';
+      if (prev === 'expanded') return 'hidden';
+      return 'compact';
+    });
+    retroAudio.playMenuBeep();
+  }, []);
 
   // Keyboard input states
   const keysDown = useRef<Record<string, boolean>>({});
@@ -97,6 +125,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           engineRef.current.startInstantReplay();
         }
       }
+
+      // Live Stats HUD toggle [Tab] or [KeyT]
+      if (e.code === 'Tab' || e.code === 'KeyT') {
+        e.preventDefault();
+        cycleHudMode();
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -110,7 +144,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [cycleHudMode]);
 
   const togglePause = useCallback(() => {
     if (!engineRef.current) return;
@@ -188,6 +222,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Update React HUD states periodically
         setHomeScore(engine.homeScore);
         setAwayScore(engine.awayScore);
+
+        // Update Live Match Stats (possession %, shots, fouls) periodically
+        frameCountRef.current++;
+        if (frameCountRef.current % 15 === 0) {
+          const totalPoss = engine.homeStats.possessionTimeSeconds + engine.awayStats.possessionTimeSeconds;
+          const homePct = totalPoss > 0 ? Math.round((engine.homeStats.possessionTimeSeconds / totalPoss) * 100) : 50;
+          const awayPct = 100 - homePct;
+
+          setLiveStats({
+            homePossPct: homePct,
+            awayPossPct: awayPct,
+            homeShots: engine.homeStats.shots,
+            awayShots: engine.awayStats.shots,
+            homeShotsOnTarget: engine.homeStats.shotsOnTarget,
+            awayShotsOnTarget: engine.awayStats.shotsOnTarget,
+            homeFouls: engine.homeStats.fouls,
+            awayFouls: engine.awayStats.fouls,
+            homeYellowCards: engine.homeStats.yellowCards,
+            awayYellowCards: engine.awayStats.yellowCards,
+            homeRedCards: engine.homeStats.redCards,
+            awayRedCards: engine.awayStats.redCards,
+          });
+        }
 
         const totalSecs = Math.floor(engine.matchClock);
         const matchMinute = Math.min(90, Math.floor((engine.matchClock / (settings.halfLengthSeconds * 2)) * 90));
@@ -268,6 +325,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           <span className="text-xl md:text-2xl">{awayTeam.flag}</span>
 
           <div className="h-6 w-px bg-slate-800 mx-1 hidden sm:block" />
+
+          {/* Live Stats HUD Button */}
+          <button
+            onClick={cycleHudMode}
+            className={`p-1.5 border ${
+              hudMode !== 'hidden'
+                ? 'border-emerald-500 bg-emerald-950/80 text-emerald-300'
+                : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-emerald-400'
+            } text-xs font-arcade flex items-center gap-1 cursor-pointer transition-colors`}
+            title="Live Match Stats HUD (Tab)"
+          >
+            <BarChart2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">
+              HUD {hudMode === 'expanded' ? '[FULL]' : hudMode === 'compact' ? '[MINI]' : '[OFF]'}
+            </span>
+          </button>
 
           {/* Replay Button */}
           <button
@@ -431,6 +504,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           </div>
         </div>
       )}
+
+      {/* Live Match Stats HUD Overlay (Possession %, Shots, Fouls) */}
+      <LiveMatchHUD
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        stats={liveStats}
+        mode={hudMode}
+        onSetMode={setHudMode}
+      />
 
       {/* 16-Bit Arcade Commentator Toast Notification */}
       <CommentaryToastBox

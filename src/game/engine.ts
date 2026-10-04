@@ -619,6 +619,12 @@ export class SoccerGameEngine {
         const owner = this.homePlayers.find((p) => p.id === this.ball.ownerId);
         if (owner) this.homeStats.possessionTimeSeconds += 1 / 60;
         else this.awayStats.possessionTimeSeconds += 1 / 60;
+      } else if (this.ball.lastTouchTeamId) {
+        if (this.ball.lastTouchTeamId === this.homeTeam.id) {
+          this.homeStats.possessionTimeSeconds += 1 / 60;
+        } else {
+          this.awayStats.possessionTimeSeconds += 1 / 60;
+        }
       }
 
       // Half-time check
