@@ -14,6 +14,7 @@ class RetroAudioEngine {
   private isMusicPlaying: boolean = false;
   private musicInterval: any = null;
   private crowdInitialized: boolean = false;
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
 
   constructor() {
     // Lazy initialized on first user gesture
@@ -37,8 +38,11 @@ class RetroAudioEngine {
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setValueAtTime(muted ? 0 : 0.35, this.ctx.currentTime);
     }
-    if (muted && this.isMusicPlaying) {
-      this.stopMusic();
+    if (muted) {
+      if (this.isMusicPlaying) {
+        this.stopMusic();
+      }
+      this.stopCommentarySpeech();
     }
   }
 
@@ -547,6 +551,97 @@ class RetroAudioEngine {
     gain.connect(this.masterGain);
     osc.start(t);
     osc.stop(t + 0.33);
+  }
+
+  /** Voice Commentary via Web Speech API (Protected against V8 GC audio cutoff) */
+  public speakCommentary(
+    text: string,
+    onStart?: () => void,
+    onEnd?: () => void
+  ) {
+    if (this.isMuted) return;
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    try {
+      // Cancel previous speech cleanly
+      window.speechSynthesis.cancel();
+      this.currentUtterance = null;
+
+      // Resume speech synthesis engine if Chromium suspended it
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+
+      // Clean arcade emojis/symbols for crisp voice reading
+      const cleanText = text
+        .replace(/⚽|🟥|🟨|🧤|🥅|★|•|—/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!cleanText) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 1.12; // Natural, energetic broadcast cadence
+      utterance.pitch = 1.05; // Slightly elevated announcer inflection
+      utterance.volume = 0.95;
+
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice =
+        voices.find(
+          (v) =>
+            v.lang.startsWith('en') &&
+            (v.name.includes('Natural') ||
+              v.name.includes('Google') ||
+              v.name.includes('David') ||
+              v.name.includes('Guy') ||
+              v.name.includes('UK') ||
+              v.name.includes('US'))
+        ) || voices.find((v) => v.lang.startsWith('en'));
+
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onstart = () => {
+        onStart?.();
+      };
+
+      utterance.onend = () => {
+        if (this.currentUtterance === utterance) {
+          this.currentUtterance = null;
+          (window as any).__retroVoiceUtterance = null;
+        }
+        onEnd?.();
+      };
+
+      utterance.onerror = () => {
+        if (this.currentUtterance === utterance) {
+          this.currentUtterance = null;
+          (window as any).__retroVoiceUtterance = null;
+        }
+        onEnd?.();
+      };
+
+      // Retain strong persistent reference on class and window to prevent V8 garbage collector from cutting off audio mid-speech
+      this.currentUtterance = utterance;
+      (window as any).__retroVoiceUtterance = utterance;
+
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      onEnd?.();
+    }
+  }
+
+  public stopCommentarySpeech() {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+        this.currentUtterance = null;
+        (window as any).__retroVoiceUtterance = null;
+      } catch {
+        // Safe catch
+      }
+    }
   }
 }
 

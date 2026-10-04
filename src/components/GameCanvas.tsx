@@ -5,7 +5,7 @@ import { MatchSettings, Team, CommentaryToast } from '../types/game';
 import { retroAudio } from '../audio/retroAudio';
 import { CommentaryToastBox } from './CommentaryToastBox';
 import { LiveMatchHUD, LiveStatsData, HUDViewMode } from './LiveMatchHUD';
-import { Pause, Play, RotateCcw, Volume2, VolumeX, ArrowLeft, BarChart2 } from 'lucide-react';
+import { Pause, Play, RotateCcw, Volume2, VolumeX, ArrowLeft, BarChart2, Maximize2, Minimize2, Monitor } from 'lucide-react';
 
 interface GameCanvasProps {
   homeTeam: Team;
@@ -23,6 +23,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onExitMatch
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<SoccerGameEngine | null>(null);
   const rendererRef = useRef<SoccerRenderer | null>(null);
   const animationFrameId = useRef<number | null>(null);
@@ -34,6 +35,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [commentaryToast, setCommentaryToast] = useState<CommentaryToast | null>(null);
+
+  // 16:9 Widescreen & Fullscreen States for Chromebooks / Windows Laptops
+  const [isAspect169, setIsAspect169] = useState(settings.aspectRatio169 !== false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Live Match Stats HUD State
   const [hudMode, setHudMode] = useState<HUDViewMode>('compact');
@@ -60,6 +65,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       return 'compact';
     });
     retroAudio.playMenuBeep();
+  }, []);
+
+  const handleDismissCommentary = useCallback(() => {
+    setCommentaryToast(null);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    try {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    } catch {
+      // Fallback if browser fullscreen is blocked
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   // Keyboard input states
@@ -102,19 +133,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
   }, [homeTeam, awayTeam, settings]);
 
-  // Keyboard Event Listeners
+  const togglePause = useCallback(() => {
+    if (!engineRef.current) return;
+    const nextState = !engineRef.current.isPaused;
+    engineRef.current.isPaused = nextState;
+    setIsPaused(nextState);
+    retroAudio.playMenuBeep();
+  }, []);
+
+  // Keyboard Event Listeners (Chromebook & Laptop Optimized)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent browser scrolling on game keys
+      // Prevent browser scrolling on game navigation keys
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
         e.preventDefault();
       }
 
       keysDown.current[e.code] = true;
 
-      // Pause toggle
+      // Pause toggle [P] / [Esc]
       if (e.code === 'KeyP' || e.code === 'Escape') {
         togglePause();
+      }
+
+      // 16:9 Fullscreen toggle [F]
+      if (e.code === 'KeyF') {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+
+      // 16:9 Aspect Ratio toggle [KeyA]
+      if (e.code === 'KeyA' && (e.ctrlKey || e.altKey)) {
+        e.preventDefault();
+        setIsAspect169((v) => !v);
       }
 
       // Replay toggle [R]
@@ -144,15 +195,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [cycleHudMode]);
-
-  const togglePause = useCallback(() => {
-    if (!engineRef.current) return;
-    const nextState = !engineRef.current.isPaused;
-    engineRef.current.isPaused = nextState;
-    setIsPaused(nextState);
-    retroAudio.playMenuBeep();
-  }, []);
+  }, [cycleHudMode, togglePause, toggleFullscreen]);
 
   const handleToggleSound = () => {
     const next = !soundMuted;
@@ -175,7 +218,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const gp1 = gamepads[0];
         const gp2 = gamepads[1];
 
-        // Player 1 Input Combination (Keyboard + Gamepad 1 + Touch)
+        // Player 1 Input Combination
+        // If 2P mode: P1 uses WASD (left side of laptop keyboard)
+        // If 1P mode: P1 can use WASD or Arrow Keys
         const p1Keys = keysDown.current;
         const gp1Left = gp1 ? gp1.axes[0] < -0.4 || gp1.buttons[14]?.pressed : false;
         const gp1Right = gp1 ? gp1.axes[0] > 0.4 || gp1.buttons[15]?.pressed : false;
@@ -183,17 +228,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const gp1Down = gp1 ? gp1.axes[1] > 0.4 || gp1.buttons[13]?.pressed : false;
 
         const inputP1 = {
-          up: p1Keys['KeyW'] || p1Keys['ArrowUp'] || gp1Up || touchDpad.current.up,
-          down: p1Keys['KeyS'] || p1Keys['ArrowDown'] || gp1Down || touchDpad.current.down,
-          left: p1Keys['KeyA'] || p1Keys['ArrowLeft'] || gp1Left || touchDpad.current.left,
-          right: p1Keys['KeyD'] || p1Keys['ArrowRight'] || gp1Right || touchDpad.current.right,
+          up: p1Keys['KeyW'] || (!settings.twoPlayer && p1Keys['ArrowUp']) || gp1Up || touchDpad.current.up,
+          down: p1Keys['KeyS'] || (!settings.twoPlayer && p1Keys['ArrowDown']) || gp1Down || touchDpad.current.down,
+          left: p1Keys['KeyA'] || (!settings.twoPlayer && p1Keys['ArrowLeft']) || gp1Left || touchDpad.current.left,
+          right: p1Keys['KeyD'] || (!settings.twoPlayer && p1Keys['ArrowRight']) || gp1Right || touchDpad.current.right,
           pass: p1Keys['KeyJ'] || p1Keys['KeyZ'] || (gp1 ? gp1.buttons[0]?.pressed : false) || touchButtons.current.pass,
           shoot: p1Keys['KeyK'] || p1Keys['KeyX'] || (gp1 ? gp1.buttons[2]?.pressed || gp1.buttons[3]?.pressed : false) || touchButtons.current.shoot,
           slide: p1Keys['KeyL'] || p1Keys['KeyC'] || (gp1 ? gp1.buttons[1]?.pressed : false) || touchButtons.current.slide,
           sprint: p1Keys['ShiftLeft'] || p1Keys['Space'] || (gp1 ? gp1.buttons[5]?.pressed || gp1.buttons[7]?.pressed : false) || touchButtons.current.sprint,
         };
 
-        // Player 2 Input (if 2P mode)
+        // Player 2 Input (Optimized for Chromebooks & laptops without Numpads!)
         let inputP2;
         if (settings.twoPlayer) {
           const gp2Left = gp2 ? gp2.axes[0] < -0.4 || gp2.buttons[14]?.pressed : false;
@@ -202,14 +247,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const gp2Down = gp2 ? gp2.axes[1] > 0.4 || gp2.buttons[13]?.pressed : false;
 
           inputP2 = {
-            up: p1Keys['Numpad8'] || p1Keys['KeyI'] || gp2Up,
-            down: p1Keys['Numpad5'] || p1Keys['KeyK'] || gp2Down,
-            left: p1Keys['Numpad4'] || p1Keys['KeyJ'] || gp2Left,
-            right: p1Keys['Numpad6'] || p1Keys['KeyL'] || gp2Right,
-            pass: p1Keys['Numpad1'] || p1Keys['Comma'] || (gp2 ? gp2.buttons[0]?.pressed : false),
-            shoot: p1Keys['Numpad2'] || p1Keys['Period'] || (gp2 ? gp2.buttons[2]?.pressed : false),
-            slide: p1Keys['Numpad3'] || p1Keys['Slash'] || (gp2 ? gp2.buttons[1]?.pressed : false),
-            sprint: p1Keys['Numpad0'] || p1Keys['Enter'] || (gp2 ? gp2.buttons[5]?.pressed : false),
+            up: p1Keys['ArrowUp'] || p1Keys['Numpad8'] || p1Keys['KeyI'] || gp2Up,
+            down: p1Keys['ArrowDown'] || p1Keys['Numpad5'] || p1Keys['KeyK'] || gp2Down,
+            left: p1Keys['ArrowLeft'] || p1Keys['Numpad4'] || p1Keys['KeyJ'] || gp2Left,
+            right: p1Keys['ArrowRight'] || p1Keys['Numpad6'] || p1Keys['KeyL'] || gp2Right,
+            pass: p1Keys['KeyN'] || p1Keys['Comma'] || p1Keys['Numpad1'] || (gp2 ? gp2.buttons[0]?.pressed : false),
+            shoot: p1Keys['KeyM'] || p1Keys['Period'] || p1Keys['Numpad2'] || (gp2 ? gp2.buttons[2]?.pressed : false),
+            slide: p1Keys['KeyB'] || p1Keys['Slash'] || p1Keys['Numpad3'] || (gp2 ? gp2.buttons[1]?.pressed : false),
+            sprint: p1Keys['ShiftRight'] || p1Keys['Enter'] || p1Keys['Numpad0'] || (gp2 ? gp2.buttons[5]?.pressed : false),
           };
         }
 
@@ -223,7 +268,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         setHomeScore(engine.homeScore);
         setAwayScore(engine.awayScore);
 
-        // Update Live Match Stats (possession %, shots, fouls) periodically
+        // Update Live Match Stats (possession %, shots, fouls)
         frameCountRef.current++;
         if (frameCountRef.current % 15 === 0) {
           const totalPoss = engine.homeStats.possessionTimeSeconds + engine.awayStats.possessionTimeSeconds;
@@ -246,7 +291,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           });
         }
 
-        const totalSecs = Math.floor(engine.matchClock);
         const matchMinute = Math.min(90, Math.floor((engine.matchClock / (settings.halfLengthSeconds * 2)) * 90));
         setGameClockDisplay(`${matchMinute < 10 ? '0' : ''}${matchMinute}:00`);
 
@@ -276,9 +320,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, [settings, onMatchComplete]);
 
   return (
-    <div className="relative w-full h-screen bg-black overflow-hidden flex flex-col select-none">
-      {/* Top 16-Bit Scoreboard Bar */}
-      <header className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-3 md:px-6 py-2.5 bg-slate-950/90 border-b border-emerald-900/80 backdrop-blur-sm">
+    <div 
+      ref={containerRef}
+      className="relative w-full h-screen bg-slate-950 overflow-hidden flex flex-col select-none"
+    >
+      {/* Top 16-Bit Scoreboard & Broadcast Controls Bar */}
+      <header className="relative z-20 shrink-0 flex items-center justify-between px-3 md:px-5 py-2 bg-slate-950/95 border-b border-emerald-900/80 backdrop-blur-sm">
         {/* Left: Home Team */}
         <div className="flex items-center gap-2 md:gap-3">
           <span className="text-xl md:text-2xl">{homeTeam.flag}</span>
@@ -293,28 +340,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         </div>
 
         {/* Center: Live Match Clock & Score */}
-        <div className="flex items-center gap-3 md:gap-5 bg-slate-900/90 px-4 py-1.5 border border-slate-700 shadow-inner">
-          <div className="flex items-center gap-2 font-pixel text-lg md:text-2xl text-slate-100">
+        <div className="flex items-center gap-2.5 sm:gap-4 bg-slate-900/90 px-3 sm:px-4 py-1 border border-slate-700 shadow-inner">
+          <div className="flex items-center gap-1.5 sm:gap-2 font-pixel text-base sm:text-xl text-slate-100">
             <span className="text-yellow-400">{homeScore}</span>
             <span className="text-slate-500">-</span>
             <span className="text-sky-400">{awayScore}</span>
           </div>
 
-          <div className="h-6 w-px bg-slate-700" />
+          <div className="h-5 w-px bg-slate-700" />
 
           <div className="flex flex-col items-center">
-            <span className="font-pixel text-[11px] md:text-xs text-emerald-400">
+            <span className="font-pixel text-[10px] sm:text-xs text-emerald-400">
               {gameClockDisplay}
             </span>
-            <span className="font-arcade text-[9px] text-slate-400">
+            <span className="font-arcade text-[8px] sm:text-[9px] text-slate-400">
               {matchPeriod} HALF
             </span>
           </div>
         </div>
 
-        {/* Right: Away Team + Controls */}
-        <div className="flex items-center gap-2 md:gap-3">
-          <div className="flex flex-col items-end">
+        {/* Right: Away Team + Chromebook/Laptop Quick Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex flex-col items-end hidden xs:flex">
             <span className="font-pixel text-xs md:text-sm text-sky-400">
               {awayTeam.countryCode}
             </span>
@@ -324,12 +371,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           </div>
           <span className="text-xl md:text-2xl">{awayTeam.flag}</span>
 
-          <div className="h-6 w-px bg-slate-800 mx-1 hidden sm:block" />
+          <div className="h-5 w-px bg-slate-800 mx-0.5 hidden sm:block" />
+
+          {/* 16:9 Aspect Ratio Lock Toggle */}
+          <button
+            onClick={() => {
+              retroAudio.playMenuBeep();
+              setIsAspect169(!isAspect169);
+            }}
+            className={`p-1 sm:p-1.5 border ${
+              isAspect169
+                ? 'border-emerald-500 bg-emerald-950/80 text-emerald-300'
+                : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+            } text-[10px] font-arcade flex items-center gap-1 cursor-pointer transition-colors`}
+            title="Toggle 16:9 Aspect Ratio / Full-Bleed"
+          >
+            <Monitor className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{isAspect169 ? '16:9 FIT' : 'STRETCH'}</span>
+          </button>
+
+          {/* Fullscreen Toggle (F) */}
+          <button
+            onClick={toggleFullscreen}
+            className="p-1 sm:p-1.5 border border-slate-700 bg-slate-900 text-slate-300 hover:text-emerald-400 text-xs font-arcade flex items-center gap-1 cursor-pointer"
+            title="Toggle 16:9 Fullscreen [F]"
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            <span className="hidden lg:inline">[F]</span>
+          </button>
 
           {/* Live Stats HUD Button */}
           <button
             onClick={cycleHudMode}
-            className={`p-1.5 border ${
+            className={`p-1 sm:p-1.5 border ${
               hudMode !== 'hidden'
                 ? 'border-emerald-500 bg-emerald-950/80 text-emerald-300'
                 : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-emerald-400'
@@ -342,7 +416,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             </span>
           </button>
 
-          {/* Replay Button */}
+          {/* Instant Replay Button */}
           <button
             onClick={() => {
               if (engineRef.current) {
@@ -353,49 +427,64 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 }
               }
             }}
-            className="p-1.5 border border-slate-700 bg-slate-900 text-slate-300 hover:text-emerald-400 text-xs font-arcade hidden md:flex items-center gap-1"
+            className="p-1 sm:p-1.5 border border-slate-700 bg-slate-900 text-slate-300 hover:text-emerald-400 text-xs font-arcade hidden md:flex items-center gap-1 cursor-pointer"
             title="Instant Replay (R)"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>REPLAY [R]</span>
+            <span>[R]</span>
           </button>
 
           {/* Pause Button */}
           <button
             onClick={togglePause}
-            className="p-1.5 border border-slate-700 bg-slate-900 text-slate-300 hover:text-yellow-400"
+            className="p-1 sm:p-1.5 border border-slate-700 bg-slate-900 text-slate-300 hover:text-yellow-400 cursor-pointer"
             title="Pause (P / Esc)"
           >
-            {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4" />}
+            {isPaused ? <Play className="w-3.5 h-3.5 text-emerald-400" /> : <Pause className="w-3.5 h-3.5" />}
           </button>
 
           {/* Sound Toggle */}
           <button
             onClick={handleToggleSound}
-            className="p-1.5 border border-slate-700 bg-slate-900 text-slate-300 hover:text-emerald-400"
+            className="p-1 sm:p-1.5 border border-slate-700 bg-slate-900 text-slate-300 hover:text-emerald-400 cursor-pointer"
+            title="Toggle Audio [M]"
           >
-            {soundMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4" />}
+            {soundMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5" />}
           </button>
         </div>
       </header>
 
-      {/* Main Full-Screen Game Canvas */}
-      <div className="relative flex-1 w-full h-full">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full block bg-slate-950 cursor-crosshair"
-        />
-
-        {/* CRT Scanline Filter Overlay */}
-        {settings.crtFilter && (
-          <div className="absolute inset-0 crt-overlay crt-vignette pointer-events-none z-10" />
+      {/* Main Pitch Arena Viewport (16:9 Optimized) */}
+      <div className="relative flex-1 w-full h-full flex items-center justify-center bg-black overflow-hidden">
+        {isAspect169 ? (
+          <div className="relative aspect-[16/9] w-full max-h-full max-w-[calc(100vh*16/9)] shadow-2xl bg-slate-950 flex items-center justify-center border-x-2 sm:border-x-4 border-slate-900 overflow-hidden">
+            <canvas
+              ref={canvasRef}
+              className="w-full h-full block bg-slate-950 cursor-crosshair"
+            />
+            {/* CRT Scanline Filter Overlay */}
+            {settings.crtFilter && (
+              <div className="absolute inset-0 crt-overlay crt-vignette pointer-events-none z-10" />
+            )}
+          </div>
+        ) : (
+          <div className="relative w-full h-full">
+            <canvas
+              ref={canvasRef}
+              className="w-full h-full block bg-slate-950 cursor-crosshair"
+            />
+            {/* CRT Scanline Filter Overlay */}
+            {settings.crtFilter && (
+              <div className="absolute inset-0 crt-overlay crt-vignette pointer-events-none z-10" />
+            )}
+          </div>
         )}
       </div>
 
-      {/* On-Screen Mobile / Touch Virtual Controls */}
-      <div className="md:hidden absolute bottom-4 left-4 right-4 z-20 flex justify-between items-end pointer-events-none">
+      {/* Virtual Touch Controls (Visible only on compact touch mobile screens) */}
+      <div className="md:hidden absolute bottom-3 left-3 right-3 z-20 flex justify-between items-end pointer-events-none">
         {/* Virtual D-Pad (Left) */}
-        <div className="relative w-32 h-32 bg-slate-900/60 border border-slate-700 rounded-lg pointer-events-auto p-1 grid grid-cols-3 grid-rows-3 gap-1 shadow-xl">
+        <div className="relative w-28 h-28 bg-slate-900/70 border border-slate-700 rounded-lg pointer-events-auto p-1 grid grid-cols-3 grid-rows-3 gap-0.5 shadow-xl">
           <div />
           <button
             onTouchStart={() => (touchDpad.current.up = true)}
@@ -432,35 +521,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         </div>
 
         {/* Action Buttons (Right) */}
-        <div className="pointer-events-auto flex flex-col gap-2">
-          <div className="flex gap-2">
+        <div className="pointer-events-auto flex flex-col gap-1.5">
+          <div className="flex gap-1.5">
             <button
               onTouchStart={() => (touchButtons.current.sprint = true)}
               onTouchEnd={() => (touchButtons.current.sprint = false)}
-              className="w-14 h-14 bg-sky-900/90 active:bg-sky-600 border-2 border-sky-400 font-pixel text-[9px] text-sky-200 rounded-md shadow-lg flex items-center justify-center"
+              className="w-12 h-12 bg-sky-900/90 active:bg-sky-600 border border-sky-400 font-pixel text-[8px] text-sky-200 rounded-md shadow-lg flex items-center justify-center"
             >
               RUN
             </button>
             <button
               onTouchStart={() => (touchButtons.current.slide = true)}
               onTouchEnd={() => (touchButtons.current.slide = false)}
-              className="w-14 h-14 bg-amber-900/90 active:bg-amber-600 border-2 border-amber-400 font-pixel text-[9px] text-amber-200 rounded-md shadow-lg flex items-center justify-center"
+              className="w-12 h-12 bg-amber-900/90 active:bg-amber-600 border border-amber-400 font-pixel text-[8px] text-amber-200 rounded-md shadow-lg flex items-center justify-center"
             >
               SLIDE
             </button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               onTouchStart={() => (touchButtons.current.pass = true)}
               onTouchEnd={() => (touchButtons.current.pass = false)}
-              className="w-14 h-14 bg-emerald-900/90 active:bg-emerald-600 border-2 border-emerald-400 font-pixel text-[9px] text-emerald-200 rounded-md shadow-lg flex items-center justify-center"
+              className="w-12 h-12 bg-emerald-900/90 active:bg-emerald-600 border border-emerald-400 font-pixel text-[8px] text-emerald-200 rounded-md shadow-lg flex items-center justify-center"
             >
               PASS
             </button>
             <button
               onTouchStart={() => (touchButtons.current.shoot = true)}
               onTouchEnd={() => (touchButtons.current.shoot = false)}
-              className="w-14 h-14 bg-rose-900/90 active:bg-rose-600 border-2 border-rose-400 font-pixel text-[9px] text-rose-200 rounded-md shadow-lg flex items-center justify-center"
+              className="w-12 h-12 bg-rose-900/90 active:bg-rose-600 border border-rose-400 font-pixel text-[8px] text-rose-200 rounded-md shadow-lg flex items-center justify-center"
             >
               SHOOT
             </button>
@@ -470,18 +559,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       {/* Pause Menu Modal Overlay */}
       {isPaused && (
-        <div className="absolute inset-0 z-30 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-slate-900 border-2 border-emerald-500 p-6 shadow-2xl text-center">
-            <h3 className="font-pixel text-lg text-yellow-300 mb-6 tracking-wider">
+            <h3 className="font-pixel text-base sm:text-lg text-yellow-300 mb-5 tracking-wider">
               MATCH PAUSED
             </h3>
 
-            <div className="space-y-3 font-arcade text-xs">
+            <div className="space-y-2.5 font-arcade text-xs">
               <button
                 onClick={togglePause}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold border border-emerald-300 transition-colors"
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold border border-emerald-300 transition-colors cursor-pointer"
               >
-                RESUME MATCH
+                RESUME MATCH [ESC]
               </button>
 
               <button
@@ -489,14 +578,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   togglePause();
                   if (engineRef.current) engineRef.current.startInstantReplay();
                 }}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 transition-colors"
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 transition-colors cursor-pointer"
               >
-                WATCH INSTANT REPLAY
+                WATCH INSTANT REPLAY [R]
+              </button>
+
+              <button
+                onClick={toggleFullscreen}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 transition-colors cursor-pointer"
+              >
+                {isFullscreen ? 'EXIT FULLSCREEN [F]' : 'ENTER 16:9 FULLSCREEN [F]'}
               </button>
 
               <button
                 onClick={onExitMatch}
-                className="w-full py-2.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-600 transition-colors"
+                className="w-full py-2.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-600 transition-colors cursor-pointer"
               >
                 QUIT TO MAIN MENU
               </button>
@@ -517,7 +613,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       {/* 16-Bit Arcade Commentator Toast Notification */}
       <CommentaryToastBox
         toast={commentaryToast}
-        onDismiss={() => setCommentaryToast(null)}
+        onDismiss={handleDismissCommentary}
       />
     </div>
   );

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GameMode, Difficulty, Weather } from '../types/game';
 import { retroAudio } from '../audio/retroAudio';
-import { Volume2, VolumeX, Tv, HelpCircle, Trophy, Play, Target, Shield, Award } from 'lucide-react';
+import { Volume2, VolumeX, Tv, HelpCircle, Trophy, Play, Target, Shield, Award, Maximize2, Minimize2, Monitor, Cpu } from 'lucide-react';
 
 interface TitleScreenProps {
   onSelectMode: (mode: GameMode) => void;
@@ -15,6 +15,10 @@ interface TitleScreenProps {
   onToggleCrt: () => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
+  aspectRatio169?: boolean;
+  onToggleAspectRatio?: () => void;
+  performanceMode?: 'standard' | 'eco';
+  onTogglePerformanceMode?: () => void;
   onOpenControls: () => void;
   onOpenRoster?: () => void;
 }
@@ -31,10 +35,36 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   onToggleCrt,
   soundEnabled,
   onToggleSound,
+  aspectRatio169 = true,
+  onToggleAspectRatio,
+  performanceMode = 'standard',
+  onTogglePerformanceMode,
   onOpenControls,
   onOpenRoster,
 }) => {
   const [hasStartedMusic, setHasStartedMusic] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFs = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFs);
+    return () => document.removeEventListener('fullscreenchange', handleFs);
+  }, []);
+
+  const toggleFullscreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  };
 
   const handleStartMusic = () => {
     if (!hasStartedMusic) {
@@ -51,19 +81,29 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
   return (
     <div 
-      className="relative min-h-screen w-full flex flex-col justify-between items-center bg-slate-950 text-slate-100 p-4 md:p-8 select-none"
+      className="relative min-h-screen w-full flex flex-col justify-between items-center bg-slate-950 text-slate-100 p-3 sm:p-5 select-none"
       onClick={handleStartMusic}
     >
-      {/* Top Bar Navigation */}
-      <header className="w-full max-w-5xl flex items-center justify-between border-b border-emerald-900/60 pb-3 z-10">
-        <div className="flex items-center gap-3">
-          <span className="font-pixel text-emerald-400 text-sm md:text-base tracking-wider">
+      {/* Top Bar Navigation (16:9 Optimized) */}
+      <header className="w-full max-w-5xl flex items-center justify-between border-b border-emerald-900/60 pb-2.5 z-10 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="font-pixel text-emerald-400 text-xs sm:text-sm md:text-base tracking-wider">
             RETRO STRIKER '94
           </span>
-          <span className="text-xs text-slate-400 font-arcade hidden sm:inline">· 16-BIT ARCADE ENGINE</span>
+          <span className="text-[10px] sm:text-xs text-slate-400 font-arcade hidden sm:inline">· 16:9 ARCADE ENGINE</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Fullscreen toggle [F] */}
+          <button
+            onClick={toggleFullscreen}
+            className="px-2.5 py-1 text-xs font-arcade border border-slate-700 bg-slate-900 text-slate-300 hover:border-emerald-500 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition-colors"
+            title="Toggle Fullscreen (F)"
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5 text-emerald-400" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            <span className="hidden md:inline">16:9 FULL [F]</span>
+          </button>
+
           {/* CRT scanlines toggle */}
           <button
             onClick={(e) => {
@@ -71,7 +111,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               retroAudio.playMenuBeep();
               onToggleCrt();
             }}
-            className={`px-3 py-1.5 text-xs font-arcade border transition-all flex items-center gap-1.5 ${
+            className={`px-2.5 py-1 text-xs font-arcade border transition-all flex items-center gap-1 cursor-pointer ${
               crtFilter 
                 ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300' 
                 : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
@@ -88,10 +128,10 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               e.stopPropagation();
               onToggleSound();
             }}
-            className="p-2 border border-slate-700 bg-slate-900 text-slate-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors"
+            className="p-1.5 border border-slate-700 bg-slate-900 text-slate-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors cursor-pointer"
             title={soundEnabled ? 'Mute Audio' : 'Unmute Audio'}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-rose-400" />}
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5 text-rose-400" />}
           </button>
 
           {/* Controls Help */}
@@ -101,10 +141,10 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               retroAudio.playMenuBeep();
               onOpenControls();
             }}
-            className="px-3 py-1.5 text-xs font-arcade border border-slate-700 bg-slate-900 text-slate-300 hover:border-emerald-500 hover:text-emerald-300 flex items-center gap-1"
+            className="px-2.5 py-1 text-xs font-arcade border border-slate-700 bg-slate-900 text-slate-300 hover:border-emerald-500 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
           >
             <HelpCircle className="w-3.5 h-3.5" />
-            <span>HOW TO PLAY</span>
+            <span className="hidden sm:inline">CONTROLS</span>
           </button>
 
           {/* 100 Players Database Roster */}
@@ -115,104 +155,104 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                 retroAudio.playMenuBeep();
                 onOpenRoster();
               }}
-              className="px-3 py-1.5 text-xs font-arcade border border-yellow-500/80 bg-yellow-950/40 text-yellow-300 hover:bg-yellow-900/60 hover:border-yellow-400 flex items-center gap-1.5 cursor-pointer shadow-sm"
+              className="px-2.5 py-1 text-xs font-arcade border border-yellow-500/80 bg-yellow-950/40 text-yellow-300 hover:bg-yellow-900/60 hover:border-yellow-400 flex items-center gap-1 cursor-pointer shadow-sm"
               title="Official 100 Players Database from PDF"
             >
               <Award className="w-3.5 h-3.5 text-yellow-400" />
-              <span>100 PLAYERS [PDF]</span>
+              <span>ROSTER</span>
             </button>
           )}
         </div>
       </header>
 
-      {/* Main Title Hero Banner */}
-      <main className="w-full max-w-5xl flex flex-col items-center my-auto py-4 z-10">
+      {/* Main Title Hero Banner & Mode Select (Optimized for 16:9 Viewport Height) */}
+      <main className="w-full max-w-4xl flex flex-col items-center my-auto py-2 sm:py-3 z-10 shrink-0">
         {/* Pixel Art Title Graphic */}
-        <div className="relative w-full max-w-2xl rounded-none border-4 border-emerald-600 bg-slate-900 overflow-hidden shadow-2xl shadow-emerald-950/60 mb-6">
+        <div className="relative w-full max-w-xl rounded-none border-2 sm:border-4 border-emerald-600 bg-slate-900 overflow-hidden shadow-2xl shadow-emerald-950/60 mb-3 sm:mb-4">
           <img
             src="/src/assets/images/retro_fifa_title_1791033197230.jpg"
             alt="Retro Striker '94 16-Bit Title"
-            className="w-full h-48 md:h-64 object-cover object-center filter contrast-110"
+            className="w-full h-36 sm:h-44 md:h-52 object-cover object-center filter contrast-110"
             referrerPolicy="no-referrer"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent flex flex-col justify-end p-4">
-            <h1 className="font-pixel text-xl sm:text-2xl md:text-3xl text-yellow-300 text-center drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)] tracking-wide">
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent flex flex-col justify-end p-3">
+            <h1 className="font-pixel text-lg sm:text-xl md:text-2xl text-yellow-300 text-center drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)] tracking-wide">
               SUPER RETRO SOCCER
             </h1>
-            <p className="text-center font-arcade text-xs md:text-sm text-emerald-300 mt-1 tracking-widest">
-              PRESS ANY MODE TO KICK OFF
+            <p className="text-center font-arcade text-[10px] sm:text-xs text-emerald-300 mt-0.5 tracking-widest">
+              OPTIMIZED FOR CHROMEBOOKS & WINDOWS LAPTOS · 16:9 WIDESCREEN
             </p>
           </div>
         </div>
 
         {/* Game Mode Selector Grid */}
-        <div className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        <div className="w-full max-w-xl grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 mb-3 sm:mb-4">
           <button
             onClick={() => handleModeClick('exhibition')}
-            className="group relative p-4 bg-slate-900/90 hover:bg-emerald-950/80 border-2 border-emerald-600/80 hover:border-emerald-400 text-left transition-all cursor-pointer"
+            className="group relative p-2.5 sm:p-3 bg-slate-900/90 hover:bg-emerald-950/80 border-2 border-emerald-600/80 hover:border-emerald-400 text-left transition-all cursor-pointer"
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-pixel text-xs sm:text-sm text-emerald-400 group-hover:text-yellow-300">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="font-pixel text-[11px] sm:text-xs text-emerald-400 group-hover:text-yellow-300">
                 EXHIBITION MATCH
               </span>
-              <Play className="w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition-transform" />
+              <Play className="w-3.5 h-3.5 text-emerald-400 group-hover:translate-x-1 transition-transform" />
             </div>
-            <p className="text-xs text-slate-400 font-arcade">
-              Quick match · Single Player or Local 2P · Custom rules
+            <p className="text-[10px] text-slate-400 font-arcade">
+              Single Player or Laptop 2-Player · Custom rules
             </p>
           </button>
 
           <button
             onClick={() => handleModeClick('tournament')}
-            className="group relative p-4 bg-slate-900/90 hover:bg-yellow-950/70 border-2 border-yellow-600/80 hover:border-yellow-400 text-left transition-all cursor-pointer"
+            className="group relative p-2.5 sm:p-3 bg-slate-900/90 hover:bg-yellow-950/70 border-2 border-yellow-600/80 hover:border-yellow-400 text-left transition-all cursor-pointer"
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-pixel text-xs sm:text-sm text-yellow-400 group-hover:text-yellow-200">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="font-pixel text-[11px] sm:text-xs text-yellow-400 group-hover:text-yellow-200">
                 RETRO SOCCER
               </span>
-              <Trophy className="w-4 h-4 text-yellow-400 group-hover:scale-110 transition-transform" />
+              <Trophy className="w-3.5 h-3.5 text-yellow-400 group-hover:scale-110 transition-transform" />
             </div>
-            <p className="text-xs text-slate-400 font-arcade">
-              16 Teams · Knockout ladder from Round of 16 to the Final
+            <p className="text-[10px] text-slate-400 font-arcade">
+              16 Teams · Knockout ladder to the World Final
             </p>
           </button>
 
           <button
             onClick={() => handleModeClick('penalties')}
-            className="group relative p-4 bg-slate-900/90 hover:bg-rose-950/70 border-2 border-rose-600/80 hover:border-rose-400 text-left transition-all cursor-pointer"
+            className="group relative p-2.5 sm:p-3 bg-slate-900/90 hover:bg-rose-950/70 border-2 border-rose-600/80 hover:border-rose-400 text-left transition-all cursor-pointer"
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-pixel text-xs sm:text-sm text-rose-400 group-hover:text-rose-200">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="font-pixel text-[11px] sm:text-xs text-rose-400 group-hover:text-rose-200">
                 PENALTY SHOOTOUT
               </span>
-              <Target className="w-4 h-4 text-rose-400 group-hover:rotate-45 transition-transform" />
+              <Target className="w-3.5 h-3.5 text-rose-400 group-hover:rotate-45 transition-transform" />
             </div>
-            <p className="text-xs text-slate-400 font-arcade">
-              5-Kick showdown · High stakes target shooting & goalie saves
+            <p className="text-[10px] text-slate-400 font-arcade">
+              5-Kick showdown · Sudden death target shooting
             </p>
           </button>
 
           <button
             onClick={() => handleModeClick('training')}
-            className="group relative p-4 bg-slate-900/90 hover:bg-sky-950/70 border-2 border-sky-600/80 hover:border-sky-400 text-left transition-all cursor-pointer"
+            className="group relative p-2.5 sm:p-3 bg-slate-900/90 hover:bg-sky-950/70 border-2 border-sky-600/80 hover:border-sky-400 text-left transition-all cursor-pointer"
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-pixel text-xs sm:text-sm text-sky-400 group-hover:text-sky-200">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="font-pixel text-[11px] sm:text-xs text-sky-400 group-hover:text-sky-200">
                 FREE KICK PRACTICE
               </span>
-              <Shield className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
+              <Shield className="w-3.5 h-3.5 text-sky-400 group-hover:scale-110 transition-transform" />
             </div>
-            <p className="text-xs text-slate-400 font-arcade">
-              Curling free kicks over 4-man walls with corner bullseyes
+            <p className="text-[10px] text-slate-400 font-arcade">
+              Curling free kicks over 4-man defensive walls
             </p>
           </button>
         </div>
 
-        {/* Arcade Settings Bar */}
-        <div className="w-full max-w-2xl bg-slate-900/80 border border-slate-800 p-3.5 flex flex-wrap items-center justify-between gap-4 text-xs">
+        {/* Arcade Settings Bar (Includes 16:9 Aspect & Chromebook Eco Mode) */}
+        <div className="w-full max-w-xl bg-slate-900/85 border border-slate-800 p-2.5 sm:p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
           {/* Half Length */}
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-arcade">MATCH TIME:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-arcade text-[10px]">TIME:</span>
             <div className="flex gap-1">
               {[60, 90, 180].map((sec) => (
                 <button
@@ -222,7 +262,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                     retroAudio.playMenuBeep();
                     onChangeHalfLength(sec);
                   }}
-                  className={`px-2 py-1 font-arcade border text-xs ${
+                  className={`px-1.5 py-0.5 font-arcade border text-[10px] cursor-pointer ${
                     halfLength === sec
                       ? 'bg-emerald-600 border-emerald-400 text-slate-950 font-bold'
                       : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
@@ -235,8 +275,8 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           </div>
 
           {/* Difficulty */}
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-arcade">AI SKILL:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-arcade text-[10px]">AI:</span>
             <div className="flex gap-1">
               {(['amateur', 'semi-pro', 'world-class'] as Difficulty[]).map((d) => (
                 <button
@@ -246,21 +286,21 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                     retroAudio.playMenuBeep();
                     onChangeDifficulty(d);
                   }}
-                  className={`px-2 py-1 font-arcade uppercase border text-xs ${
+                  className={`px-1.5 py-0.5 font-arcade uppercase border text-[10px] cursor-pointer ${
                     difficulty === d
                       ? 'bg-yellow-500 border-yellow-300 text-slate-950 font-bold'
                       : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
                   }`}
                 >
-                  {d === 'amateur' ? 'AMATEUR' : d === 'semi-pro' ? 'PRO' : 'LEGEND'}
+                  {d === 'amateur' ? 'EASY' : d === 'semi-pro' ? 'PRO' : 'LEGEND'}
                 </button>
               ))}
             </div>
           </div>
 
           {/* Weather */}
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-arcade">PITCH:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-arcade text-[10px]">PITCH:</span>
             <div className="flex gap-1">
               {(['sunny', 'night', 'rain', 'snow'] as Weather[]).map((w) => (
                 <button
@@ -270,7 +310,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                     retroAudio.playMenuBeep();
                     onChangeWeather(w);
                   }}
-                  className={`px-2 py-1 font-arcade uppercase border text-xs ${
+                  className={`px-1.5 py-0.5 font-arcade uppercase border text-[10px] cursor-pointer ${
                     weather === w
                       ? 'bg-sky-600 border-sky-400 text-slate-950 font-bold'
                       : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
@@ -281,16 +321,62 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               ))}
             </div>
           </div>
+
+          {/* 16:9 Aspect Ratio Toggle */}
+          {onToggleAspectRatio && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-arcade text-[10px]">RATIO:</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  retroAudio.playMenuBeep();
+                  onToggleAspectRatio();
+                }}
+                className={`px-2 py-0.5 font-arcade border text-[10px] cursor-pointer flex items-center gap-1 ${
+                  aspectRatio169
+                    ? 'bg-emerald-700 border-emerald-400 text-emerald-100 font-bold'
+                    : 'bg-slate-800 border-slate-700 text-slate-300'
+                }`}
+                title="16:9 Fixed Widescreen Ratio"
+              >
+                <Monitor className="w-3 h-3" />
+                <span>{aspectRatio169 ? '16:9 WIDE' : 'STRETCH'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Chromebook / Laptop Eco Mode Toggle */}
+          {onTogglePerformanceMode && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-arcade text-[10px]">GPU:</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  retroAudio.playMenuBeep();
+                  onTogglePerformanceMode();
+                }}
+                className={`px-2 py-0.5 font-arcade border text-[10px] cursor-pointer flex items-center gap-1 ${
+                  performanceMode === 'eco'
+                    ? 'bg-amber-600 border-amber-400 text-slate-950 font-bold'
+                    : 'bg-slate-800 border-slate-700 text-slate-300'
+                }`}
+                title="Optimized for Chromebooks & Battery-Saving Mode"
+              >
+                <Cpu className="w-3 h-3" />
+                <span>{performanceMode === 'eco' ? 'CHROMEBOOK ECO' : '60FPS TURBO'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="w-full max-w-5xl flex items-center justify-between border-t border-slate-900 pt-3 text-xs text-slate-500 font-arcade z-10">
-        <div>16-BIT RETRO SOCCER SIMULATOR</div>
-        <div className="flex items-center gap-4">
-          <span>KEYBOARD & GAMEPAD READY</span>
+      <footer className="w-full max-w-5xl flex items-center justify-between border-t border-slate-900 pt-2 text-[10px] sm:text-xs text-slate-500 font-arcade z-10 shrink-0">
+        <div>16:9 RETRO SOCCER SIMULATOR</div>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <span>CHROMEBOOK & LAPTOP READY</span>
           <span>·</span>
-          <span>© 1994 RETRO SPORTS</span>
+          <span>PRESS [F] FOR FULLSCREEN</span>
         </div>
       </footer>
     </div>

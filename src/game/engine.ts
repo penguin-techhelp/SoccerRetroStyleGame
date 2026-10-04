@@ -177,9 +177,13 @@ export class SoccerGameEngine {
     this.weatherParticles = [];
     this.turfSplashes = [];
 
+    const isEco = this.settings.performanceMode === 'eco';
+    const rainCount = isEco ? 120 : 280;
+    const snowCount = isEco ? 100 : 240;
+
     if (this.settings.weather === 'rain') {
-      // 280 diagonal falling rain streaks
-      for (let i = 0; i < 280; i++) {
+      // Diagonal falling rain streaks
+      for (let i = 0; i < rainCount; i++) {
         this.weatherParticles.push({
           x: Math.random() * PITCH_WIDTH,
           y: Math.random() * PITCH_HEIGHT,
@@ -191,8 +195,8 @@ export class SoccerGameEngine {
         });
       }
     } else if (this.settings.weather === 'snow') {
-      // 240 drifting snowflakes with sway
-      for (let i = 0; i < 240; i++) {
+      // Drifting snowflakes with sway
+      for (let i = 0; i < snowCount; i++) {
         this.weatherParticles.push({
           x: Math.random() * PITCH_WIDTH,
           y: Math.random() * PITCH_HEIGHT,
@@ -272,6 +276,8 @@ export class SoccerGameEngine {
         vy: 0,
         targetX: startX,
         targetY: startY,
+        baseXPct: coord.xPct,
+        baseYPct: coord.yPct,
         stats: tmpl.stats,
         matchStats: { goals: 0, assists: 0, tackles: 0, shots: 0 },
         stamina: 100,
@@ -302,6 +308,8 @@ export class SoccerGameEngine {
         vy: 0,
         targetX: startX,
         targetY: startY,
+        baseXPct: coord.xPct,
+        baseYPct: coord.yPct,
         stats: tmpl.stats,
         matchStats: { goals: 0, assists: 0, tackles: 0, shots: 0 },
         stamina: 100,
@@ -350,6 +358,8 @@ export class SoccerGameEngine {
       p.y = ty;
       p.targetX = tx;
       p.targetY = ty;
+      p.baseXPct = coord.xPct;
+      p.baseYPct = coord.yPct;
       p.vx = 0;
       p.vy = 0;
       p.state = 'idle';
@@ -368,6 +378,8 @@ export class SoccerGameEngine {
       p.y = ty;
       p.targetX = tx;
       p.targetY = ty;
+      p.baseXPct = coord.xPct;
+      p.baseYPct = coord.yPct;
       p.vx = 0;
       p.vy = 0;
       p.state = 'idle';
@@ -384,8 +396,8 @@ export class SoccerGameEngine {
     retroAudio.playWhistle(false);
   }
 
-  public showMessage(text: string, subtext: string | undefined, type: BannerMessage['type'], duration: number = 100) {
-    this.activeMessage = { text, subtext, type, duration };
+  public showMessage(_text: string, _subtext?: string, _type?: BannerMessage['type'], _duration: number = 100) {
+    this.activeMessage = null;
   }
 
   public switchControlledPlayer(teamId: string, specificPlayer?: Player) {
@@ -645,6 +657,9 @@ export class SoccerGameEngine {
     // Update State timers for set pieces / goals
     if (this.playState !== 'in_play') {
       this.stateTimer--;
+      if (this.playState === 'kickoff' && this.stateTimer <= 60) {
+        this.playState = 'in_play';
+      }
       if (this.playState === 'goal' && this.stateTimer <= 0) {
         // Kickoff to the team that conceded
         const concedingTeamId = this.ball.x > PITCH_WIDTH / 2 ? this.awayTeam.id : this.homeTeam.id;
@@ -852,7 +867,7 @@ export class SoccerGameEngine {
     }
 
     // Start in-play from kickoff on any action
-    if (this.playState === 'kickoff' && (input.pass || input.shoot)) {
+    if (this.playState === 'kickoff' && (input.pass || input.shoot || input.up || input.down || input.left || input.right || input.sprint || input.slide)) {
       this.playState = 'in_play';
     }
   }
@@ -1034,68 +1049,305 @@ export class SoccerGameEngine {
     }
   }
 
+  /**
+   * FC Mobile Dynamic Tactical Movement System
+   * Keeps all outfield players in realistic, fluid, continuous motion.
+   * Players dynamically shift with the ball, make forward runs, drop back to shield,
+   * create passing triangles, mark opposing attackers, and never stand frozen in one spot.
+   */
+  private updateOffBallMovement(
+    p: Player,
+    teamId: string,
+    isHome: boolean,
+    hasTeamPossession: boolean,
+    ballCarrier: Player | null
+  ) {
+    if (p.isControlled || p.hasRedCard || p.role === 'GK') return;
+
+    const oppSquad = isHome ? this.awayPlayers : this.homePlayers;
+    const sameSquad = isHome ? this.homePlayers : this.awayPlayers;
+
+    // 1. Formation Anchor Position (computed dynamically from base formation percentages)
+    const baseXPct = p.baseXPct ?? (p.role === 'DEF' ? 0.2 : p.role === 'MID' ? 0.38 : 0.65);
+    const baseYPct = p.baseYPct ?? 0.5;
+
+    const baseX = isHome
+      ? 60 + baseXPct * (PITCH_WIDTH - 120)
+      : PITCH_WIDTH - (60 + baseXPct * (PITCH_WIDTH - 120));
+    const baseY = 80 + baseYPct * (PITCH_HEIGHT - 160);
+
+    // 2. Ball progression & Pitch Compression (0.0 = left goal, 1.0 = right goal)
+    const ballProgX = Math.max(0, Math.min(1, this.ball.x / PITCH_WIDTH));
+    const ballOffsetY = this.ball.y - PITCH_HEIGHT / 2;
+
+    let dynX = baseX;
+    let dynY = baseY;
+    let isSprintingRun = false;
+
+    // Run clock unique to each player
+    p.runPhaseTimer = (p.runPhaseTimer || 0) + 1;
+    const runCycle = Math.sin(this.matchClock * 1.6 + p.number * 1.9);
+
+    if (hasTeamPossession) {
+      // ===== ATTACKING PHASE (TEAM HAS THE BALL) =====
+      const attackDir = isHome ? 1 : -1;
+
+      // Dynamic team push: entire squad shifts forward with ball progression
+      if (isHome) {
+        dynX += ballProgX * 220;
+      } else {
+        dynX -= (1 - ballProgX) * 220;
+      }
+      dynY += ballOffsetY * 0.35;
+
+      // Role-specific attacking behaviors
+      if (p.role === 'FWD') {
+        // --- STRIKERS & FORWARDS ---
+        dynX += attackDir * 140;
+
+        // FC Mobile Attacking Run Triggers:
+        // Every 3-4 seconds, forward makes an aggressive run behind defense or across the box
+        if (runCycle > 0.12) {
+          isSprintingRun = true;
+          dynX += attackDir * 90;
+          dynY = PITCH_HEIGHT / 2 + Math.sin(this.matchClock * 2.2 + p.number * 1.6) * 130;
+        } else {
+          // Check towards the ball carrier to offer a direct pass option
+          if (ballCarrier) {
+            dynX -= attackDir * 35;
+            dynY = ballCarrier.y + (baseYPct > 0.5 ? 45 : -45);
+          }
+        }
+      } else if (p.role === 'MID') {
+        // --- MIDFIELDERS ---
+        const isWideMid = baseYPct < 0.28 || baseYPct > 0.72;
+        if (isWideMid) {
+          // Wingers push high and wide to stretch opponent defense
+          dynX += attackDir * 120;
+          dynY = baseYPct < 0.5 ? 100 : PITCH_HEIGHT - 100;
+          if (runCycle > 0.25) {
+            isSprintingRun = true;
+            dynX += attackDir * 75; // Wing overlap burst!
+          }
+        } else {
+          // Central midfielders: dynamic passing triangles & support
+          dynX += attackDir * 80;
+          if (ballCarrier && ballCarrier.id !== p.id) {
+            const distToCarrier = Math.hypot(p.x - ballCarrier.x, p.y - ballCarrier.y);
+            // Ideal support distance is ~130 - 200px
+            if (distToCarrier > 220) {
+              dynX = ballCarrier.x + attackDir * (p.number % 2 === 0 ? 80 : -50);
+              dynY = ballCarrier.y + (p.number % 2 === 0 ? 70 : -70);
+            } else if (distToCarrier < 100) {
+              const pushAngle = Math.atan2(p.y - ballCarrier.y, p.x - ballCarrier.x);
+              dynX += Math.cos(pushAngle) * 60;
+              dynY += Math.sin(pushAngle) * 60;
+            }
+          }
+        }
+      } else if (p.role === 'DEF') {
+        // --- DEFENDERS ---
+        const isFullback = baseYPct < 0.22 || baseYPct > 0.78;
+        if (isFullback && runCycle > 0.4 && (isHome ? ballProgX > 0.42 : ballProgX < 0.58)) {
+          // Modern overlapping fullback run!
+          isSprintingRun = true;
+          dynX += attackDir * 135;
+          dynY = baseYPct < 0.5 ? 95 : PITCH_HEIGHT - 95;
+        } else {
+          // Center backs hold high defensive line at midfield to compress pitch
+          const maxPush = isHome ? PITCH_WIDTH * 0.54 : PITCH_WIDTH * 0.46;
+          dynX = isHome ? Math.min(maxPush, dynX + 70) : Math.max(maxPush, dynX - 70);
+        }
+      }
+    } else {
+      // ===== DEFENSIVE PHASE (OPPONENT HAS THE BALL) =====
+      const ownGoalX = isHome ? 60 : PITCH_WIDTH - 60;
+      const defDir = isHome ? -1 : 1;
+
+      // Entire squad contracts towards own goal
+      if (isHome) {
+        dynX -= (1 - ballProgX) * 200;
+      } else {
+        dynX += ballProgX * 200;
+      }
+      dynY += ballOffsetY * 0.38;
+
+      if (p.role === 'DEF') {
+        // Defenders drop deep to shield the penalty box
+        dynX += defDir * 110;
+        // Center backs mark nearest opposing attacker goal-side
+        const nearestAttacker = this.getClosestPlayer(
+          oppSquad.filter((o) => !o.hasRedCard && o.role !== 'GK'),
+          p.x,
+          p.y
+        );
+        if (nearestAttacker) {
+          const distToAttacker = Math.hypot(p.x - nearestAttacker.x, p.y - nearestAttacker.y);
+          if (distToAttacker < 180) {
+            // Position on goal-side of attacker
+            const angleToGoal = Math.atan2(PITCH_HEIGHT / 2 - nearestAttacker.y, ownGoalX - nearestAttacker.x);
+            dynX = nearestAttacker.x + Math.cos(angleToGoal) * 32;
+            dynY = nearestAttacker.y + Math.sin(angleToGoal) * 32;
+          }
+        }
+      } else if (p.role === 'MID') {
+        // Midfielders drop back into a tight shield 60-120px in front of defense
+        dynX += defDir * 80;
+        // If ball carrier is nearby (< 130px), pinch in to help press/trap!
+        if (this.ball.ownerId) {
+          const oppCarrier = oppSquad.find((o) => o.id === this.ball.ownerId);
+          if (oppCarrier && Math.hypot(p.x - oppCarrier.x, p.y - oppCarrier.y) < 130) {
+            const trapAngle = Math.atan2(oppCarrier.y - p.y, oppCarrier.x - p.x);
+            dynX = oppCarrier.x - Math.cos(trapAngle) * 35;
+            dynY = oppCarrier.y - Math.sin(trapAngle) * 35;
+          }
+        }
+      } else if (p.role === 'FWD') {
+        // Forwards stay high near center line for counter attacks
+        const counterLine = isHome ? PITCH_WIDTH * 0.38 : PITCH_WIDTH * 0.62;
+        dynX = isHome ? Math.max(counterLine, dynX) : Math.min(counterLine, dynX);
+      }
+    }
+
+    // 3. Spacing Repulsion: Avoid clumping with teammates
+    sameSquad.forEach((tm) => {
+      if (tm.id !== p.id && !tm.hasRedCard) {
+        const distToTm = Math.hypot(p.x - tm.x, p.y - tm.y);
+        if (distToTm < 38) {
+          const repAngle = Math.atan2(p.y - tm.y, p.x - tm.x);
+          dynX += Math.cos(repAngle) * 22;
+          dynY += Math.sin(repAngle) * 22;
+        }
+      }
+    });
+
+    // 4. Pitch Boundary Clamping
+    dynX = Math.max(65, Math.min(PITCH_WIDTH - 65, dynX));
+    dynY = Math.max(55, Math.min(PITCH_HEIGHT - 55, dynY));
+
+    // 5. Continuous FC Mobile Locomotive Dynamics (Active Footwork & Runs)
+    const dx = dynX - p.x;
+    const dy = dynY - p.y;
+    const dist = Math.hypot(dx, dy);
+
+    // Dynamic player speed based on stats & situation
+    const baseStatSpeed = 3.2 + (p.stats.speed / 100) * 1.5;
+
+    if (dist > 22) {
+      // Dynamic run / sprint towards tactical position
+      const moveSpeed = isSprintingRun
+        ? Math.min(baseStatSpeed * 1.3, Math.max(3.2, dist * 0.085))
+        : Math.min(baseStatSpeed, Math.max(2.4, dist * 0.07));
+
+      p.vx = (dx / dist) * moveSpeed;
+      p.vy = (dy / dist) * moveSpeed;
+      p.facingAngle = Math.atan2(this.ball.y - p.y, this.ball.x - p.x);
+      p.state = 'running';
+    } else {
+      // FC Mobile Active Jockeying / Footwork: NEVER freeze at (0, 0)!
+      // Continuous weight shifts, micro-steps, and jockeying towards the ball
+      const footworkPulse = this.matchClock * 3.8 + p.number * 1.7;
+      const swayX = Math.sin(footworkPulse) * 1.5;
+      const swayY = Math.cos(footworkPulse * 0.95) * 1.5;
+      const microSpeed = 1.4 + (p.stats.speed / 100) * 0.6;
+
+      p.vx = (dx / (dist || 1)) * microSpeed * 0.6 + swayX;
+      p.vy = (dy / (dist || 1)) * microSpeed * 0.6 + swayY;
+      p.facingAngle = Math.atan2(this.ball.y - p.y, this.ball.x - p.x);
+      p.state = 'running';
+    }
+  }
+
   private updateOpponentAI() {
     const diff = this.settings.difficulty;
-    const aiSpeedMult = diff === 'amateur' ? 0.75 : diff === 'semi-pro' ? 0.9 : 1.05;
-    const reactionDelay = diff === 'amateur' ? 20 : diff === 'semi-pro' ? 12 : 5;
+    const aiSpeedMult = diff === 'amateur' ? 0.78 : diff === 'semi-pro' ? 0.92 : 1.05;
+    const awayHasBall = this.ball.ownerId ? this.awayPlayers.some((p) => p.id === this.ball.ownerId) : false;
+    const awayBallCarrier = awayHasBall ? this.awayPlayers.find((p) => p.id === this.ball.ownerId) || null : null;
 
-    this.awayPlayers.forEach((p) => {
-      if (p.hasRedCard || p.role === 'GK') return;
+    // Rank outfield away players by distance to ball
+    const outfieldAway = this.awayPlayers.filter((p) => !p.hasRedCard && p.role !== 'GK');
+    const rankedAway = [...outfieldAway].sort(
+      (a, b) => Math.hypot(a.x - this.ball.x, a.y - this.ball.y) - Math.hypot(b.x - this.ball.x, b.y - this.ball.y)
+    );
+    const closestAway = rankedAway[0];
+    const secondClosestAway = rankedAway[1];
 
+    outfieldAway.forEach((p) => {
       const hasBall = this.ball.ownerId === p.id;
+
       if (hasBall) {
-        // Attack towards left goal (X = 50)
+        // AI BALL CARRIER (ATTACK TOWARDS LEFT GOAL X = 60)
         const targetX = 60;
         const targetY = PITCH_HEIGHT / 2;
         const distToGoal = Math.hypot(p.x - targetX, p.y - targetY);
 
-        if (distToGoal < 380 && Math.random() < 0.05) {
+        // Check if there is an open teammate in a better position
+        const teammatesAhead = outfieldAway.filter(
+          (tm) => tm.id !== p.id && tm.x < p.x - 40 && Math.abs(tm.y - p.y) < 280
+        );
+
+        if (distToGoal < 380 && Math.random() < (diff === 'world-class' ? 0.08 : 0.04)) {
           // Shoot!
           this.executeShot(p, 0.7 + Math.random() * 0.3);
-        } else if (Math.random() < 0.03) {
-          // Pass to open teammate
-          this.executePass(p, 0.4 + Math.random() * 0.4);
+        } else if (teammatesAhead.length > 0 && Math.random() < 0.035) {
+          // Tactical pass to open teammate making a run
+          this.executePass(p, 0.45 + Math.random() * 0.35);
         } else {
-          // Dribble towards goal
-          const angle = Math.atan2(targetY - p.y, targetX - p.x);
+          // Dribble towards goal with evasive slalom around defenders
+          let angle = Math.atan2(targetY - p.y, targetX - p.x);
+
+          // Dodge nearby home defenders
+          const closeDefender = this.getClosestPlayer(
+            this.homePlayers.filter((h) => !h.hasRedCard),
+            p.x,
+            p.y
+          );
+          if (closeDefender && Math.hypot(p.x - closeDefender.x, p.y - closeDefender.y) < 70) {
+            const dodgeAngle = closeDefender.y > p.y ? -0.7 : 0.7;
+            angle += dodgeAngle;
+          }
+
           p.vx = Math.cos(angle) * (3.8 * aiSpeedMult);
           p.vy = Math.sin(angle) * (3.8 * aiSpeedMult);
           p.facingAngle = angle;
           p.state = 'running';
         }
-      } else {
-        // Off ball AI
+      } else if (!awayHasBall && closestAway && p.id === closestAway.id) {
+        // PRIMARY BALL CHASER (PRESSING DEFENDER)
         const distToBall = Math.hypot(p.x - this.ball.x, p.y - this.ball.y);
-        const isClosestToBall = this.getClosestPlayer(this.awayPlayers, this.ball.x, this.ball.y)?.id === p.id;
+        const angle = Math.atan2(this.ball.y - p.y, this.ball.x - p.x);
+        p.vx = Math.cos(angle) * (4.2 * aiSpeedMult);
+        p.vy = Math.sin(angle) * (4.2 * aiSpeedMult);
+        p.facingAngle = angle;
+        p.state = 'running';
 
-        if (isClosestToBall && distToBall < 450) {
-          // Chase ball
-          const angle = Math.atan2(this.ball.y - p.y, this.ball.x - p.x);
-          p.vx = Math.cos(angle) * (4.2 * aiSpeedMult);
-          p.vy = Math.sin(angle) * (4.2 * aiSpeedMult);
-          p.facingAngle = angle;
-          p.state = 'running';
-
-          // Slide tackle if close and ball is possessed by opponent
-          if (distToBall < 40 && this.ball.ownerId && Math.random() < (diff === 'world-class' ? 0.08 : 0.02)) {
-            this.executeSlideTackle(p);
-          }
-        } else {
-          // Return to formation zone
-          const dx = p.targetX - p.x;
-          const dy = p.targetY - p.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist > 15) {
-            p.vx = (dx / dist) * 2.8;
-            p.vy = (dy / dist) * 2.8;
-            p.facingAngle = Math.atan2(dy, dx);
-            p.state = 'running';
-          } else {
-            p.vx = 0;
-            p.vy = 0;
-            p.state = 'idle';
-          }
+        // Slide tackle when close to opponent with ball
+        if (distToBall < 45 && this.ball.ownerId && Math.random() < (diff === 'world-class' ? 0.09 : 0.03)) {
+          this.executeSlideTackle(p);
         }
+      } else if (!awayHasBall && secondClosestAway && p.id === secondClosestAway.id) {
+        // SECONDARY PRESSER (COVERING DEFENDER)
+        const goalCenter = { x: PITCH_WIDTH - 60, y: PITCH_HEIGHT / 2 };
+        const blockX = this.ball.x + (goalCenter.x - this.ball.x) * 0.25;
+        const blockY = this.ball.y + (goalCenter.y - this.ball.y) * 0.25;
+        const dx = blockX - p.x;
+        const dy = blockY - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 15) {
+          p.vx = (dx / dist) * (3.4 * aiSpeedMult);
+          p.vy = (dy / dist) * (3.4 * aiSpeedMult);
+          p.facingAngle = Math.atan2(this.ball.y - p.y, this.ball.x - p.x);
+          p.state = 'running';
+        } else {
+          p.vx = Math.cos(this.matchClock * 3) * 1.2;
+          p.vy = Math.sin(this.matchClock * 3) * 1.2;
+          p.facingAngle = Math.atan2(this.ball.y - p.y, this.ball.x - p.x);
+          p.state = 'running';
+        }
+      } else {
+        // ALL OTHER AWAY PLAYERS: FULL FC MOBILE DYNAMIC TACTICAL MOVEMENT!
+        this.updateOffBallMovement(p, this.awayTeam.id, false, awayHasBall, awayBallCarrier);
       }
     });
 
@@ -1110,56 +1362,110 @@ export class SoccerGameEngine {
   private updateTeammateAI(teamId: string) {
     const isHome = teamId === this.homeTeam.id;
     const squad = isHome ? this.homePlayers : this.awayPlayers;
-    const targetGoalX = isHome ? PITCH_WIDTH - 50 : 50;
+    const hasTeamPossession = this.ball.ownerId
+      ? squad.some((p) => p.id === this.ball.ownerId)
+      : this.ball.lastTouchTeamId === teamId;
+    const ballCarrier = hasTeamPossession
+      ? squad.find((p) => p.id === this.ball.ownerId) || null
+      : null;
 
-    squad.forEach((p) => {
-      if (p.isControlled || p.hasRedCard || p.role === 'GK') return;
+    // Outfield players ranked by distance to ball
+    const outfield = squad.filter((p) => !p.hasRedCard && p.role !== 'GK');
+    const ranked = [...outfield].sort(
+      (a, b) => Math.hypot(a.x - this.ball.x, a.y - this.ball.y) - Math.hypot(b.x - this.ball.x, b.y - this.ball.y)
+    );
+    const closest = ranked[0];
+    const secondClosest = ranked[1];
+
+    outfield.forEach((p) => {
+      // If user is controlling this player, user controls them
+      if (p.isControlled) return;
 
       const hasBall = this.ball.ownerId === p.id;
-      if (hasBall) return; // Handled elsewhere
 
-      // Dynamic forward shift when team has ball
-      const teamPossession = this.ball.lastTouchTeamId === teamId;
-      const xOffset = teamPossession ? (isHome ? 90 : -90) : 0;
+      if (hasBall) {
+        // AI Teammate has ball (when player switches or in CPU match)
+        const targetX = isHome ? PITCH_WIDTH - 60 : 60;
+        const targetY = PITCH_HEIGHT / 2;
+        const distToGoal = Math.hypot(p.x - targetX, p.y - targetY);
 
-      const targetX = p.targetX + xOffset;
-      const targetY = p.targetY;
-      const dx = targetX - p.x;
-      const dy = targetY - p.y;
-      const dist = Math.hypot(dx, dy);
-
-      if (dist > 25) {
-        const speed = Math.min(dist * 0.08, 3.5);
-        p.vx = (dx / dist) * speed;
-        p.vy = (dy / dist) * speed;
-        p.facingAngle = Math.atan2(dy, dx);
+        if (distToGoal < 360 && Math.random() < 0.05) {
+          this.executeShot(p, 0.75 + Math.random() * 0.25);
+        } else if (Math.random() < 0.03) {
+          this.executePass(p, 0.5 + Math.random() * 0.3);
+        } else {
+          const angle = Math.atan2(targetY - p.y, targetX - p.x);
+          p.vx = Math.cos(angle) * 3.8;
+          p.vy = Math.sin(angle) * 3.8;
+          p.facingAngle = angle;
+          p.state = 'running';
+        }
+      } else if (!hasTeamPossession && closest && p.id === closest.id) {
+        // Closest defender on Home team presses the ball!
+        const distToBall = Math.hypot(p.x - this.ball.x, p.y - this.ball.y);
+        const angle = Math.atan2(this.ball.y - p.y, this.ball.x - p.x);
+        p.vx = Math.cos(angle) * 4.0;
+        p.vy = Math.sin(angle) * 4.0;
+        p.facingAngle = angle;
         p.state = 'running';
+
+        // Auto tackle if opponent is carrying ball nearby
+        if (distToBall < 42 && this.ball.ownerId && Math.random() < 0.04) {
+          this.executeSlideTackle(p);
+        }
+      } else if (!hasTeamPossession && secondClosest && p.id === secondClosest.id) {
+        // 2nd closest defender provides cover/containment
+        const goalCenter = { x: isHome ? 60 : PITCH_WIDTH - 60, y: PITCH_HEIGHT / 2 };
+        const blockX = this.ball.x + (goalCenter.x - this.ball.x) * 0.28;
+        const blockY = this.ball.y + (goalCenter.y - this.ball.y) * 0.28;
+        const dx = blockX - p.x;
+        const dy = blockY - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 15) {
+          p.vx = (dx / dist) * 3.4;
+          p.vy = (dy / dist) * 3.4;
+          p.facingAngle = Math.atan2(this.ball.y - p.y, this.ball.x - p.x);
+          p.state = 'running';
+        } else {
+          p.vx = Math.cos(this.matchClock * 2.8) * 1.2;
+          p.vy = Math.sin(this.matchClock * 2.8) * 1.2;
+          p.facingAngle = Math.atan2(this.ball.y - p.y, this.ball.x - p.x);
+          p.state = 'running';
+        }
       } else {
-        p.vx = 0;
-        p.vy = 0;
-        p.state = 'idle';
+        // ALL OTHER TEAMMATES: DYNAMIC FC MOBILE OFF-BALL RUNS & PASSING SUPPORT!
+        this.updateOffBallMovement(p, teamId, isHome, hasTeamPossession, ballCarrier);
       }
     });
   }
 
   private updateGoalkeeper(gk: Player, goalX: number, isRightGoal: boolean) {
-    // Keep within penalty box mouth
-    const goalCenterY = PITCH_HEIGHT / 2;
+    // Keep within penalty box mouth with active footwork and angle narrowing
     const targetY = Math.max(GOAL_Y_MIN + 25, Math.min(GOAL_Y_MAX - 25, this.ball.y));
 
-    // Move along goal line
+    // Dynamic keeper positioning: advance off line towards ball when ball is in attacking half
+    const ballInHalf = isRightGoal ? this.ball.x > PITCH_WIDTH / 2 : this.ball.x < PITCH_WIDTH / 2;
+    const distToGoalX = isRightGoal ? PITCH_WIDTH - this.ball.x : this.ball.x;
+    const advanceOffset = ballInHalf ? Math.min(45, Math.max(10, (500 - distToGoalX) * 0.08)) : 0;
+    const targetX = isRightGoal ? goalX - advanceOffset : goalX + advanceOffset;
+
+    // Move smoothly along goal area
     const dy = targetY - gk.y;
-    if (Math.abs(dy) > 6) {
-      gk.vy = Math.sign(dy) * 3.8;
+    const dx = targetX - gk.x;
+
+    // Keeper micro-bounce (always active on toes)
+    const keeperFootwork = Math.sin(this.matchClock * 4.0) * 1.5;
+
+    if (Math.abs(dy) > 4) {
+      gk.vy = Math.sign(dy) * 3.6;
       gk.state = 'running';
     } else {
-      gk.vy = 0;
-      gk.state = 'idle';
+      gk.vy = keeperFootwork;
+      gk.state = 'running';
     }
-
-    gk.x = goalX;
-    gk.vx = 0;
-    gk.facingAngle = isRightGoal ? Math.PI : 0;
+    gk.vx = Math.sign(dx) * Math.min(Math.abs(dx) * 0.1, 2.0);
+    gk.facingAngle = Math.atan2(this.ball.y - gk.y, this.ball.x - gk.x);
 
     // Check Diving / Saves
     const distToBall = Math.hypot(gk.x - this.ball.x, gk.y - this.ball.y);
@@ -1214,11 +1520,17 @@ export class SoccerGameEngine {
     p.x = Math.max(30, Math.min(PITCH_WIDTH - 30, p.x));
     p.y = Math.max(40, Math.min(PITCH_HEIGHT - 40, p.y));
 
-    // Animation frame progression
+    // Dynamic state & animation stride progression based on real speed
+    const speed = Math.hypot(p.vx, p.vy);
+    if (p.state !== 'sliding' && p.state !== 'diving' && p.state !== 'kicking' && p.state !== 'tackled' && p.state !== 'celebrating') {
+      p.state = speed > 0.3 ? 'running' : 'idle';
+    }
+
     if (p.state === 'running') {
-      p.animTimer += 0.2;
+      p.animTimer += Math.max(0.12, Math.min(0.38, speed * 0.065));
       p.animFrame = Math.floor(p.animTimer) % 4;
     } else {
+      p.animTimer += 0.05;
       p.animFrame = 0;
     }
   }

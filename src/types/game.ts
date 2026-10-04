@@ -59,6 +59,9 @@ export interface Player {
   hairColor: string;
   hairStyle: 'short' | 'curly' | 'long' | 'buzz';
   isControlled: boolean;
+  baseXPct?: number;
+  baseYPct?: number;
+  runPhaseTimer?: number;
 }
 
 export type FormationType = '4-4-2' | '4-3-3' | '3-5-2' | '5-3-2';
@@ -187,4 +190,6 @@ export interface MatchSettings {
   twoPlayer: boolean;
   crtFilter: boolean;
   soundEnabled: boolean;
+  aspectRatio169: boolean;     // True = strict 16:9 arcade framing, False = stretch to window
+  performanceMode: 'standard' | 'eco'; // 'eco' optimizes crowd, particles, and shadows for Chromebooks/laptops
 }

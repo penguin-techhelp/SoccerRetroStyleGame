@@ -4,6 +4,10 @@ import { Player, ReplayFrame } from '../types/game';
 export class SoccerRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  private lastWidth = 0;
+  private lastHeight = 0;
+  private crowdCanvasTop: HTMLCanvasElement | null = null;
+  private crowdCanvasBottom: HTMLCanvasElement | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -11,16 +15,78 @@ export class SoccerRenderer {
     if (!context) throw new Error('Could not get 2D canvas context');
     this.ctx = context;
     this.ctx.imageSmoothingEnabled = false; // Authentic 16-bit pixel crispness
+    this.initCrowdCanvases();
+  }
+
+  private initCrowdCanvases() {
+    if (this.crowdCanvasTop && this.crowdCanvasBottom) return;
+
+    const colors = ['#dc2626', '#2563eb', '#eab308', '#16a34a', '#f8fafc', '#9333ea', '#ea580c'];
+    const h = 140;
+    const w = PITCH_WIDTH;
+
+    // Pre-render Top grandstand crowd row once to offscreen buffer
+    const topCanvas = document.createElement('canvas');
+    topCanvas.width = w;
+    topCanvas.height = h;
+    const topCtx = topCanvas.getContext('2d');
+    if (topCtx) {
+      topCtx.imageSmoothingEnabled = false;
+      const stepH = 14;
+      for (let rowY = 0; rowY < h; rowY += stepH) {
+        topCtx.fillStyle = '#1e293b';
+        topCtx.fillRect(0, rowY, w, 2);
+        for (let px = 10; px < w - 10; px += 11) {
+          const hash = Math.sin(px * 12.9898 + rowY * 78.233);
+          const colIdx = Math.floor(Math.abs(hash * colors.length)) % colors.length;
+          topCtx.fillStyle = colors[colIdx];
+          topCtx.fillRect(px, rowY + 3, 7, 7);
+          topCtx.fillStyle = '#fce0cd';
+          topCtx.fillRect(px + 1, rowY + 1, 5, 3);
+        }
+      }
+      this.crowdCanvasTop = topCanvas;
+    }
+
+    // Pre-render Bottom grandstand crowd row once to offscreen buffer
+    const botCanvas = document.createElement('canvas');
+    botCanvas.width = w;
+    botCanvas.height = h;
+    const botCtx = botCanvas.getContext('2d');
+    if (botCtx) {
+      botCtx.imageSmoothingEnabled = false;
+      const stepH = 14;
+      for (let rowY = 0; rowY < h; rowY += stepH) {
+        botCtx.fillStyle = '#1e293b';
+        botCtx.fillRect(0, rowY, w, 2);
+        for (let px = 10; px < w - 10; px += 11) {
+          const hash = Math.sin(px * 14.1234 + rowY * 81.567);
+          const colIdx = Math.floor(Math.abs(hash * colors.length)) % colors.length;
+          botCtx.fillStyle = colors[colIdx];
+          botCtx.fillRect(px, rowY + 3, 7, 7);
+          botCtx.fillStyle = '#fce0cd';
+          botCtx.fillRect(px + 1, rowY + 1, 5, 3);
+        }
+      }
+      this.crowdCanvasBottom = botCanvas;
+    }
   }
 
   public render(engine: SoccerGameEngine, width: number, height: number) {
-    this.canvas.width = width;
-    this.canvas.height = height;
-    const ctx = this.ctx;
-    ctx.imageSmoothingEnabled = false;
+    // Only reallocate canvas buffer if dimensions actually changed
+    // (Prevents GPU texture thrashing and memory garbage collection spikes on Chromebooks)
+    if (this.lastWidth !== width || this.lastHeight !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+      this.lastWidth = width;
+      this.lastHeight = height;
+      this.ctx.imageSmoothingEnabled = false;
+    }
 
-    // Camera offset
-    const zoom = Math.min(width / 1000, height / 650);
+    const ctx = this.ctx;
+
+    // Camera offset - tuned for 16:9 widescreen laptop displays (1024x576 base ratio)
+    const zoom = Math.min(width / 1024, height / 576);
     const camX = engine.cameraX;
     const camY = engine.cameraY;
 
@@ -72,9 +138,9 @@ export class SoccerRenderer {
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(-200, -200, PITCH_WIDTH + 400, PITCH_HEIGHT + 400);
 
-    // Grandstand crowd rows (Top & Bottom)
-    this.drawCrowdRows(0, -140, PITCH_WIDTH, 140, engine);
-    this.drawCrowdRows(0, PITCH_HEIGHT, PITCH_WIDTH, 140, engine);
+    // Grandstand crowd rows (Top & Bottom) using pre-rendered cached crowd bitmap
+    this.drawCrowdRows(0, -140, PITCH_WIDTH, 140, engine, true);
+    this.drawCrowdRows(0, PITCH_HEIGHT, PITCH_WIDTH, 140, engine, false);
 
     // LED Advertising Boards along sidelines
     const ads = ['★ SEGA-94 ★', '★ RETRO STRIKER ★', '★ CHIP-COLA ★', '★ PIXEL-16 ★', '★ MEGA SOCCER ★', '★ ARCADE PRO ★'];
@@ -101,29 +167,16 @@ export class SoccerRenderer {
     }
   }
 
-  private drawCrowdRows(x: number, y: number, w: number, h: number, engine: SoccerGameEngine) {
+  private drawCrowdRows(x: number, y: number, w: number, h: number, engine: SoccerGameEngine, isTop: boolean) {
     const ctx = this.ctx;
-    const colors = ['#dc2626', '#2563eb', '#eab308', '#16a34a', '#f8fafc', '#9333ea', '#ea580c'];
+    this.initCrowdCanvases();
 
-    // Tiered bench steps
-    const stepH = 14;
-    for (let rowY = y; rowY < y + h; rowY += stepH) {
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(x, rowY, w, 2);
-
-      // Spectator pixel heads
-      for (let px = x + 10; px < x + w - 10; px += 11) {
-        const hash = Math.sin(px * 12.9898 + rowY * 78.233);
-        const colIdx = Math.floor(Math.abs(hash * colors.length)) % colors.length;
-        ctx.fillStyle = colors[colIdx];
-        ctx.fillRect(px, rowY + 3, 7, 7);
-        // Head
-        ctx.fillStyle = '#fce0cd';
-        ctx.fillRect(px + 1, rowY + 1, 5, 3);
-      }
+    const crowdCanvas = isTop ? this.crowdCanvasTop : this.crowdCanvasBottom;
+    if (crowdCanvas) {
+      ctx.drawImage(crowdCanvas, x, y);
     }
 
-    // Flash photography bulbs
+    // Flash photography bulbs (animated dynamic highlights)
     engine.crowdFlashes.forEach((f) => {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
       ctx.beginPath();
@@ -423,6 +476,8 @@ export class SoccerRenderer {
       bodyY = 5;
     } else if (player.state === 'celebrating') {
       bodyY = -Math.abs(Math.sin(player.animTimer * 2)) * 6; // Jumping fist pump
+    } else if (player.state === 'idle') {
+      bodyY = Math.sin(player.animTimer * 1.8) * 0.7; // Active breathing stance
     }
 
     const jerseyColor = isGK ? team.gkColor : team.primaryColor;
@@ -431,8 +486,13 @@ export class SoccerRenderer {
 
     // Legs animation
     const runFrame = player.animFrame;
-    const legOffset1 = player.state === 'running' ? Math.sin(runFrame * 1.5) * 5 : 0;
-    const legOffset2 = player.state === 'running' ? -Math.sin(runFrame * 1.5) * 5 : 0;
+    const isRunning = player.state === 'running';
+    const legOffset1 = isRunning
+      ? Math.sin(runFrame * 1.5) * 5
+      : Math.sin(player.animTimer * 1.8) * 1.2;
+    const legOffset2 = isRunning
+      ? -Math.sin(runFrame * 1.5) * 5
+      : -Math.sin(player.animTimer * 1.8) * 1.2;
 
     // Socks & Boots
     ctx.fillStyle = sockColor;
@@ -465,7 +525,9 @@ export class SoccerRenderer {
 
     // Arms
     ctx.fillStyle = player.skinTone;
-    const armOffset = player.state === 'running' ? -legOffset1 * 0.8 : 0;
+    const armOffset = isRunning
+      ? -legOffset1 * 0.8
+      : Math.sin(player.animTimer * 1.8) * 0.8;
     ctx.fillRect(-9, -8 + armOffset + bodyY, 3, 7);
     ctx.fillRect(6, -8 - armOffset + bodyY, 3, 7);
 
@@ -616,12 +678,7 @@ export class SoccerRenderer {
       this.drawPowerGauge(w / 2 - 60, h - 90, 120, 10, engine.passPower, 'PASS POWER');
     }
 
-    // 3. Active Commentary Message Banner
-    if (engine.activeMessage) {
-      this.drawMessageBanner(engine.activeMessage, w, h);
-    }
-
-    // 4. Instant Replay Blinking VCR Overlay
+    // 3. Instant Replay Blinking VCR Overlay
     if (engine.isReplayPlaying) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
       ctx.fillRect(0, 0, w, h);
@@ -712,34 +769,6 @@ export class SoccerRenderer {
     ctx.font = '8px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(label, x + w / 2, y - 5);
-  }
-
-  private drawMessageBanner(msg: { text: string; subtext?: string; type: string }, w: number, h: number) {
-    const ctx = this.ctx;
-    const bannerH = 70;
-    const bannerY = h / 2 - bannerH / 2;
-
-    // Banner Background with 16-bit Gold/Red bevels
-    const isGoal = msg.type === 'goal';
-    const isRedCard = msg.type === 'red_card';
-
-    ctx.fillStyle = isGoal ? '#eab308' : isRedCard ? '#ef4444' : '#0f172a';
-    ctx.fillRect(0, bannerY - 4, w, bannerH + 8);
-
-    ctx.fillStyle = isGoal ? '#ca8a04' : isRedCard ? '#b91c1c' : '#1e293b';
-    ctx.fillRect(0, bannerY, w, bannerH);
-
-    // Text
-    ctx.fillStyle = isGoal ? '#020617' : '#ffffff';
-    ctx.font = '22px "Press Start 2P", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(msg.text, w / 2, bannerY + 34);
-
-    if (msg.subtext) {
-      ctx.font = '11px "Press Start 2P", monospace';
-      ctx.fillStyle = isGoal ? '#451a03' : '#94a3b8';
-      ctx.fillText(msg.subtext, w / 2, bannerY + 54);
-    }
   }
 
   public renderHighlightFrame(

@@ -48,22 +48,22 @@ export const TeamSelect: React.FC<TeamSelectProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col justify-between p-4 md:p-6 select-none">
+    <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col justify-between p-3 sm:p-4 select-none">
       {/* Header */}
-      <header className="w-full max-w-6xl mx-auto flex items-center justify-between border-b border-emerald-900/60 pb-3">
+      <header className="w-full max-w-6xl mx-auto flex items-center justify-between border-b border-emerald-900/60 pb-2.5 shrink-0">
         <button
           onClick={() => {
             retroAudio.playMenuBeep();
             onBack();
           }}
-          className="flex items-center gap-1.5 text-xs font-arcade text-slate-400 hover:text-emerald-400 border border-slate-700 bg-slate-900 px-3 py-1.5 transition-colors"
+          className="flex items-center gap-1.5 text-xs font-arcade text-slate-400 hover:text-emerald-400 border border-slate-700 bg-slate-900 px-3 py-1.5 transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>MAIN MENU</span>
         </button>
 
         <div className="flex items-center gap-2">
-          <h2 className="font-pixel text-sm md:text-base text-yellow-300 tracking-wider">
+          <h2 className="font-pixel text-xs sm:text-sm md:text-base text-yellow-300 tracking-wider">
             {isTournament ? 'CHOOSE YOUR CLUB' : 'CLUB SELECTION'}
           </h2>
           {onOpenRoster && (
@@ -113,7 +113,7 @@ export const TeamSelect: React.FC<TeamSelectProps> = ({
       </header>
 
       {/* Main Content */}
-      <main className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 my-auto py-4">
+      <main className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 my-auto py-2 sm:py-3 shrink-0">
         {/* Left Team Showcase (Home) */}
         <div 
           onClick={() => setActiveSlot('home')}

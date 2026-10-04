@@ -30,15 +30,24 @@ type AppScreen =
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('TITLE');
 
-  // Match Configuration Settings
-  const [settings, setSettings] = useState<MatchSettings>({
-    mode: 'exhibition',
-    halfLengthSeconds: 60, // 2 minutes per match (fast arcade tempo!)
-    difficulty: 'semi-pro',
-    weather: 'sunny',
-    twoPlayer: false,
-    crtFilter: true,
-    soundEnabled: true,
+  // Match Configuration Settings (Optimized for Chromebooks & Windows Laptops)
+  const [settings, setSettings] = useState<MatchSettings>(() => {
+    const isBudgetOrChromebook =
+      typeof navigator !== 'undefined' &&
+      ((navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
+        /CrOS/.test(navigator.userAgent));
+
+    return {
+      mode: 'exhibition',
+      halfLengthSeconds: 60, // 2 minutes per match (fast arcade tempo!)
+      difficulty: 'semi-pro',
+      weather: 'sunny',
+      twoPlayer: false,
+      crtFilter: true,
+      soundEnabled: true,
+      aspectRatio169: true,
+      performanceMode: isBudgetOrChromebook ? 'eco' : 'standard',
+    };
   });
 
   // Selected Teams
@@ -143,6 +152,10 @@ export default function App() {
           onToggleCrt={handleToggleCrt}
           soundEnabled={settings.soundEnabled}
           onToggleSound={handleToggleSound}
+          aspectRatio169={settings.aspectRatio169}
+          onToggleAspectRatio={() => setSettings((s) => ({ ...s, aspectRatio169: !s.aspectRatio169 }))}
+          performanceMode={settings.performanceMode}
+          onTogglePerformanceMode={() => setSettings((s) => ({ ...s, performanceMode: s.performanceMode === 'eco' ? 'standard' : 'eco' }))}
           onOpenControls={() => setShowControlsModal(true)}
           onOpenRoster={() => setShowRosterModal(true)}
         />

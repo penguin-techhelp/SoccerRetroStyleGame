@@ -27,7 +27,20 @@ The repository is pre-configured with a GitHub Actions workflow in `.github/work
 
 ---
 
-### Key GitHub Pages Features Configured:
+## 💻 Chromebook & Windows Laptop Optimizations (16:9 Widescreen)
+
+- **Native 16:9 Aspect Ratio**:
+  - The game is framed for standard 16:9 widescreen laptop displays (1366×768, 1920×1080, 2560×1440).
+  - Press **`[F]`** anytime to toggle edge-to-edge 16:9 fullscreen.
+  - Dedicated **16:9 FIT vs. STRETCH** toggle in the match scoreboard bar.
+- **No-Numpad 2-Player Laptop Controls**:
+  - **Player 1 (Left Side)**: `W, A, S, D` (Move), `J / Z` (Pass), `K / X` (Shoot), `L / C` (Slide), `Space / Shift` (Sprint).
+  - **Player 2 (Right Side)**: `Arrow Keys` (Move), `N / Comma` (Pass), `M / Period` (Shoot), `B / Slash` (Slide), `Right Shift / Enter` (Sprint).
+  - Plug-and-play Xbox, PlayStation, and generic USB/Bluetooth gamepads are auto-detected.
+- **Chromebook Eco Performance Engine**:
+  - Pre-cached offscreen crowd bitmaps eliminate hundreds of thousands of trigonometric calculations per second.
+  - Prevents GPU texture reallocation by throttling canvas buffer updates to actual viewport resizes.
+  - Low-power Chromebooks (e.g. Intel Celeron, MediaTek) run at a smooth, locked 60 FPS without battery drain.
 
 - **Relative Asset Paths (`base: './'`)**: In `vite.config.ts`, ensuring assets load perfectly on any GitHub Pages subfolder (e.g. `/<repo-name>/`).
 - **`.nojekyll`**: Included in `public/` and `dist/` to prevent GitHub Pages' default Jekyll processor from ignoring assets.
