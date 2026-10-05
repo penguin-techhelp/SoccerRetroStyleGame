@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GameMode, Difficulty, Weather } from '../types/game';
 import { retroAudio } from '../audio/retroAudio';
-import { Volume2, VolumeX, Tv, HelpCircle, Trophy, Play, Target, Shield, Award, Maximize2, Minimize2, Monitor, Cpu } from 'lucide-react';
+import { Volume2, VolumeX, Tv, HelpCircle, Trophy, Play, Target, Shield, Award, Maximize2, Minimize2, Monitor, Cpu, Sparkles } from 'lucide-react';
 
 interface TitleScreenProps {
   onSelectMode: (mode: GameMode) => void;
@@ -170,23 +170,44 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         {/* Pixel Art Title Graphic */}
         <div className="relative w-full max-w-xl rounded-none border-2 sm:border-4 border-emerald-600 bg-slate-900 overflow-hidden shadow-2xl shadow-emerald-950/60 mb-3 sm:mb-4">
           <img
-            src="/src/assets/images/retro_fifa_title_1791033197230.jpg"
+            src="/src/assets/images/retro_striker_title_1791197272785.jpg"
             alt="Retro Striker '94 16-Bit Title"
             className="w-full h-36 sm:h-44 md:h-52 object-cover object-center filter contrast-110"
             referrerPolicy="no-referrer"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent flex flex-col justify-end p-3">
             <h1 className="font-pixel text-lg sm:text-xl md:text-2xl text-yellow-300 text-center drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)] tracking-wide">
-              SUPER RETRO SOCCER
+              RETRO STRIKER '94
             </h1>
             <p className="text-center font-arcade text-[10px] sm:text-xs text-emerald-300 mt-0.5 tracking-widest">
-              OPTIMIZED FOR CHROMEBOOKS & WINDOWS LAPTOS · 16:9 WIDESCREEN
+              OPTIMIZED FOR CHROMEBOOKS & WINDOWS LAPTOPS · 16:9 WIDESCREEN
             </p>
           </div>
         </div>
 
         {/* Game Mode Selector Grid */}
-        <div className="w-full max-w-xl grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 mb-3 sm:mb-4">
+        <div className="w-full max-w-xl grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 mb-2 sm:mb-3">
+          {/* Highlighted Career Mode (Featured Full Width) */}
+          <button
+            onClick={() => handleModeClick('career')}
+            className="sm:col-span-2 group relative p-2.5 sm:p-3 bg-gradient-to-r from-amber-950/90 via-slate-900 to-yellow-950/90 hover:from-amber-900/90 hover:to-yellow-900/90 border-2 border-yellow-500 hover:border-yellow-300 text-left transition-all cursor-pointer shadow-lg shadow-yellow-950/40"
+          >
+            <div className="flex items-center justify-between mb-0.5">
+              <div className="flex items-center gap-2">
+                <span className="px-1.5 py-0.2 bg-yellow-400 text-slate-950 font-pixel text-[8px] font-bold">
+                  NEW
+                </span>
+                <span className="font-pixel text-[11px] sm:text-xs text-yellow-300 group-hover:text-yellow-100">
+                  CAREER MODE: ROAD TO GLORY
+                </span>
+              </div>
+              <Sparkles className="w-4 h-4 text-yellow-400 group-hover:rotate-12 group-hover:scale-110 transition-transform" />
+            </div>
+            <p className="text-[10px] text-slate-300 font-arcade">
+              Start with basic players · Trade & sell cards · Open packs & build a world-class dynasty!
+            </p>
+          </button>
+
           <button
             onClick={() => handleModeClick('exhibition')}
             className="group relative p-2.5 sm:p-3 bg-slate-900/90 hover:bg-emerald-950/80 border-2 border-emerald-600/80 hover:border-emerald-400 text-left transition-all cursor-pointer"

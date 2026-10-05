@@ -102,15 +102,15 @@ export const PenaltyShootout: React.FC<PenaltyShootoutProps> = ({ onBack }) => {
         let result: KickResult = 'goal';
         if (isMiss) {
           result = 'missed';
-          retroAudio.playCrowdGasp();
+          retroAudio.playRandomCrowdMissedShot();
           setAnnouncement('SHOT WIDE / OVER THE BAR!');
         } else if (isSave) {
           result = 'saved';
-          retroAudio.playPostClang();
+          retroAudio.playRandomCrowdSave();
           setAnnouncement('WHAT A SAVE BY THE KEEPER!');
         } else {
           result = 'goal';
-          retroAudio.playGoalCelebration();
+          retroAudio.playRandomGoalCelebration();
           setAnnouncement('GOAL! PERFECT STRIKE!');
         }
 
@@ -161,15 +161,15 @@ export const PenaltyShootout: React.FC<PenaltyShootoutProps> = ({ onBack }) => {
       let result: KickResult = 'goal';
       if (isMiss) {
         result = 'missed';
-        retroAudio.playCrowdGasp();
+        retroAudio.playRandomCrowdMissedShot();
         setAnnouncement('THEY MISSED! OFF TARGET!');
       } else if (isSave) {
         result = 'saved';
-        retroAudio.playPostClang();
+        retroAudio.playRandomCrowdSave();
         setAnnouncement('SAVED! SENSATIONAL STOP!');
       } else {
         result = 'goal';
-        retroAudio.playGoalCelebration();
+        retroAudio.playRandomGoalCelebration();
         setAnnouncement('GOAL FOR OPPONENT!');
       }
 

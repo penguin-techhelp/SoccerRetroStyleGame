@@ -12,6 +12,8 @@ export const GOAL_DEPTH = 55;
 export interface NetPoint {
   x: number;
   y: number;
+  originX: number;
+  originY: number;
   vx: number;
   vy: number;
 }
@@ -148,10 +150,19 @@ export class SoccerGameEngine {
   public setPieceTeamId: string | null = null;
   public setPieceLocation: { x: number; y: number } = { x: PITCH_WIDTH / 2, y: PITCH_HEIGHT / 2 };
 
+  // Shot tracking for crowd reactions (missed shots, saves, woodwork)
+  public shotActive: boolean = false;
+  public shotTimer: number = 0;
+
+  // Auto Mode (AI controls Home Team on behalf of player with seamless manual override)
+  public autoPlay: boolean = false;
+  public autoPlayUserOverrideTimer: number = 0;
+
   constructor(homeTeam: Team, awayTeam: Team, settings: MatchSettings) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
     this.settings = settings;
+    this.autoPlay = Boolean(settings.autoPlay);
 
     this.ball = {
       x: PITCH_WIDTH / 2,
@@ -231,25 +242,32 @@ export class SoccerGameEngine {
   }
 
   private initNetMeshes() {
-    // 5x5 spring points for each net
+    // 7x5 dense spring-damper mesh for realistic net depth and sag
+    const rows = 7;
+    const cols = 5;
+    const goalXLeft = 45;
+    const goalXRight = PITCH_WIDTH - 45;
+    const depth = 65;
+
     this.leftNetMesh = [];
-    for (let r = 0; r <= 4; r++) {
+    for (let r = 0; r < rows; r++) {
       const row: NetPoint[] = [];
-      const y = GOAL_Y_MIN + (r / 4) * (GOAL_Y_MAX - GOAL_Y_MIN);
-      for (let c = 0; c <= 3; c++) {
-        const x = 50 - (c / 3) * GOAL_DEPTH;
-        row.push({ x, y, vx: 0, vy: 0 });
+      const y = GOAL_Y_MIN + (r / (rows - 1)) * (GOAL_Y_MAX - GOAL_Y_MIN);
+      for (let c = 0; c < cols; c++) {
+        // Natural net sag and depth
+        const x = goalXLeft - (c / (cols - 1)) * depth;
+        row.push({ x, y, originX: x, originY: y, vx: 0, vy: 0 });
       }
       this.leftNetMesh.push(row);
     }
 
     this.rightNetMesh = [];
-    for (let r = 0; r <= 4; r++) {
+    for (let r = 0; r < rows; r++) {
       const row: NetPoint[] = [];
-      const y = GOAL_Y_MIN + (r / 4) * (GOAL_Y_MAX - GOAL_Y_MIN);
-      for (let c = 0; c <= 3; c++) {
-        const x = (PITCH_WIDTH - 50) + (c / 3) * GOAL_DEPTH;
-        row.push({ x, y, vx: 0, vy: 0 });
+      const y = GOAL_Y_MIN + (r / (rows - 1)) * (GOAL_Y_MAX - GOAL_Y_MIN);
+      for (let c = 0; c < cols; c++) {
+        const x = goalXRight + (c / (cols - 1)) * depth;
+        row.push({ x, y, originX: x, originY: y, vx: 0, vy: 0 });
       }
       this.rightNetMesh.push(row);
     }
@@ -476,24 +494,23 @@ export class SoccerGameEngine {
     this.lastPasserTeamId = null;
     this.lastShooterId = null;
 
-    // Net bulge impulse
-    if (isHome) {
-      // Right net hit
-      this.rightNetMesh.forEach((row) =>
-        row.forEach((pt) => {
-          pt.vx += 10;
-        })
-      );
-    } else {
-      // Left net hit
-      this.leftNetMesh.forEach((row) =>
-        row.forEach((pt) => {
-          pt.vx -= 10;
-        })
-      );
-    }
+    // Realistic localized net bulge impulse based on ball impact point & velocity
+    const targetMesh = isHome ? this.rightNetMesh : this.leftNetMesh;
+    const impactDir = isHome ? 1 : -1;
+    const ballSpeed = Math.hypot(this.ball.vx, this.ball.vy);
 
-    retroAudio.playGoalCelebration();
+    targetMesh.forEach((row) => {
+      row.forEach((pt) => {
+        const dist = Math.hypot(pt.originX - this.ball.x, pt.originY - this.ball.y);
+        const force = Math.max(0, 1 - dist / 130) * Math.min(22, ballSpeed * 0.9 + 12);
+        pt.vx += impactDir * force;
+        pt.vy += (pt.originY - this.ball.y) * 0.08 * force;
+      });
+    });
+
+    this.shotActive = false;
+    this.shotTimer = 0;
+    retroAudio.playRandomGoalCelebration();
     const bannerSubtext = assistPlayer
       ? `${scorer.name.toUpperCase()} #${scorer.number} · AST: ${assistPlayer.name.toUpperCase()}`
       : `${scorer.name.toUpperCase()} #${scorer.number}`;
@@ -656,6 +673,14 @@ export class SoccerGameEngine {
       }
     }
 
+    // Update active shot flight timer
+    if (this.shotTimer > 0) {
+      this.shotTimer--;
+      if (this.shotTimer <= 0) {
+        this.shotActive = false;
+      }
+    }
+
     // Update State timers for set pieces / goals
     if (this.playState !== 'in_play') {
       this.stateTimer--;
@@ -669,8 +694,18 @@ export class SoccerGameEngine {
       }
     }
 
-    // Process Player 1 Input
-    this.handlePlayerControl(this.homeTeam.id, this.userControlledPlayerHome, inputP1, false);
+    // Update user manual override timer for Auto Mode
+    if (this.autoPlayUserOverrideTimer > 0) {
+      this.autoPlayUserOverrideTimer--;
+    }
+
+    // Process Player 1 Input or Auto-Play AI
+    const isManualActive = this.autoPlayUserOverrideTimer > 0 || !this.autoPlay;
+    if (isManualActive) {
+      this.handlePlayerControl(this.homeTeam.id, this.userControlledPlayerHome, inputP1, false);
+    } else {
+      this.updateAutoPlayHome();
+    }
 
     // Process Player 2 / AI
     if (this.settings.twoPlayer && inputP2) {
@@ -771,6 +806,12 @@ export class SoccerGameEngine {
     isP2: boolean
   ) {
     if (!player || player.hasRedCard) return;
+
+    // Manual input override detection for Auto Mode
+    const hasManualInput = input.up || input.down || input.left || input.right || input.pass || input.shoot || input.slide || input.sprint;
+    if (hasManualInput && !isP2) {
+      this.autoPlayUserOverrideTimer = 90; // Seamless manual takeover for 1.5s
+    }
 
     // Movement vector
     let dx = 0;
@@ -930,6 +971,8 @@ export class SoccerGameEngine {
     this.ball.ownerId = null;
     this.ball.lastTouchTeamId = shooter.teamId;
     this.lastShooterId = shooter.id;
+    this.shotActive = true;
+    this.shotTimer = 85;
     shooter.matchStats.shots++;
     shooter.state = 'kicking';
     shooter.stateTimer = 20;
@@ -1037,16 +1080,19 @@ export class SoccerGameEngine {
         fouler.yellowCards = Math.max(fouler.yellowCards, 1);
         if (fouler.teamId === this.homeTeam.id) this.homeStats.redCards++;
         else this.awayStats.redCards++;
+        retroAudio.playRandomCrowdRedCardUproar();
         this.showMessage('RED CARD!', `${fouler.name.toUpperCase()} SENT OFF`, 'red_card', 160);
         this.emitCommentary('red_card', foulerTeam.name, foulerTeam.flag, currentMinute, fouler.name);
       } else {
         fouler.yellowCards++;
         if (fouler.teamId === this.homeTeam.id) this.homeStats.yellowCards++;
         else this.awayStats.yellowCards++;
+        retroAudio.playRandomCrowdFoul();
         this.showMessage('YELLOW CARD', `${fouler.name.toUpperCase()} BOOKED`, 'yellow_card', 140);
         this.emitCommentary('yellow_card', foulerTeam.name, foulerTeam.flag, currentMinute, fouler.name);
       }
     } else {
+      retroAudio.playRandomCrowdFoul();
       this.showMessage('REFEREE WHISTLE', 'FOUL AWARDED', 'foul', 100);
     }
   }
@@ -1361,6 +1407,109 @@ export class SoccerGameEngine {
     if (homeGK) this.updateGoalkeeper(homeGK, 60, false);
   }
 
+  public setAutoPlay(enabled: boolean) {
+    this.autoPlay = enabled;
+    if (enabled) {
+      this.autoPlayUserOverrideTimer = 0;
+    }
+  }
+
+  /**
+   * Autonomous AI Control for Player's Team (Auto Mode)
+   * Drives the active home player with tactical intelligence: shooting, passing,
+   * dribbling around defenders, and pressing/tackling when defending.
+   */
+  private updateAutoPlayHome() {
+    const homeHasBall = this.ball.ownerId ? this.homePlayers.some((p) => p.id === this.ball.ownerId) : false;
+    const homeBallCarrier = homeHasBall ? this.homePlayers.find((p) => p.id === this.ball.ownerId) || null : null;
+
+    // Outfield home players
+    const outfieldHome = this.homePlayers.filter((p) => !p.hasRedCard && p.role !== 'GK');
+    const rankedHome = [...outfieldHome].sort(
+      (a, b) => Math.hypot(a.x - this.ball.x, a.y - this.ball.y) - Math.hypot(b.x - this.ball.x, b.y - this.ball.y)
+    );
+    const closestHome = rankedHome[0];
+
+    // Ensure user controlled player follows the active AI actor
+    if (homeBallCarrier && (!this.userControlledPlayerHome || this.userControlledPlayerHome.id !== homeBallCarrier.id)) {
+      this.switchControlledPlayer(this.homeTeam.id, homeBallCarrier);
+    } else if (!homeHasBall && closestHome && (!this.userControlledPlayerHome || this.userControlledPlayerHome.id !== closestHome.id)) {
+      this.switchControlledPlayer(this.homeTeam.id, closestHome);
+    }
+
+    const activePlayer = this.userControlledPlayerHome;
+    if (!activePlayer || activePlayer.hasRedCard) return;
+
+    // Start in-play from kickoff automatically
+    if (this.playState === 'kickoff') {
+      if (this.stateTimer < 100) {
+        this.playState = 'in_play';
+        if (activePlayer && this.ball.ownerId === activePlayer.id) {
+          const teammate = outfieldHome.find((tm) => tm.id !== activePlayer.id);
+          if (teammate) {
+            this.executePass(activePlayer, 0.45);
+          }
+        }
+      }
+      return;
+    }
+
+    const hasBall = this.ball.ownerId === activePlayer.id;
+
+    if (hasBall) {
+      // ATTACK TOWARDS RIGHT GOAL (X = PITCH_WIDTH - 60)
+      const targetX = PITCH_WIDTH - 60;
+      const targetY = PITCH_HEIGHT / 2;
+      const distToGoal = Math.hypot(activePlayer.x - targetX, activePlayer.y - targetY);
+
+      // Check for teammates ahead making a run
+      const teammatesAhead = outfieldHome.filter(
+        (tm) => tm.id !== activePlayer.id && tm.x > activePlayer.x + 35 && Math.abs(tm.y - activePlayer.y) < 280
+      );
+
+      // Shoot when in range
+      if (distToGoal < 370 && Math.random() < 0.06) {
+        this.executeShot(activePlayer, 0.75 + Math.random() * 0.25);
+      } else if (teammatesAhead.length > 0 && Math.random() < 0.04) {
+        // Tactical pass to open teammate
+        this.executePass(activePlayer, 0.45 + Math.random() * 0.35);
+      } else {
+        // Dynamic dribble with obstacle avoidance
+        let angle = Math.atan2(targetY - activePlayer.y, targetX - activePlayer.x);
+
+        // Dodge nearby away defenders
+        const closeDefender = this.getClosestPlayer(
+          this.awayPlayers.filter((a) => !a.hasRedCard),
+          activePlayer.x,
+          activePlayer.y
+        );
+        if (closeDefender && Math.hypot(activePlayer.x - closeDefender.x, activePlayer.y - closeDefender.y) < 65) {
+          const dodgeAngle = closeDefender.y > activePlayer.y ? -0.7 : 0.7;
+          angle += dodgeAngle;
+        }
+
+        activePlayer.vx = Math.cos(angle) * 4.2;
+        activePlayer.vy = Math.sin(angle) * 4.2;
+        activePlayer.facingAngle = angle;
+        activePlayer.state = 'running';
+      }
+    } else {
+      // DEFENDING OR CHASING LOOSE BALL
+      const distToBall = Math.hypot(activePlayer.x - this.ball.x, activePlayer.y - this.ball.y);
+      const angle = Math.atan2(this.ball.y - activePlayer.y, this.ball.x - activePlayer.x);
+
+      activePlayer.vx = Math.cos(angle) * 4.4;
+      activePlayer.vy = Math.sin(angle) * 4.4;
+      activePlayer.facingAngle = angle;
+      activePlayer.state = 'running';
+
+      // Slide tackle when close to opponent with ball
+      if (distToBall < 46 && this.ball.ownerId && Math.random() < 0.05) {
+        this.executeSlideTackle(activePlayer);
+      }
+    }
+  }
+
   private updateTeammateAI(teamId: string) {
     const isHome = teamId === this.homeTeam.id;
     const squad = isHome ? this.homePlayers : this.awayPlayers;
@@ -1481,8 +1630,10 @@ export class SoccerGameEngine {
         this.ball.vy = (Math.random() - 0.5) * 6;
         this.ball.vz = 3;
         this.ball.ownerId = null;
+        this.shotActive = false;
+        this.shotTimer = 0;
 
-        retroAudio.playCrowdGasp();
+        retroAudio.playRandomCrowdSave();
         this.showMessage('WHAT A SAVE!', `${gk.name.toUpperCase()} PUSHES IT AWAY!`, 'save', 90);
 
         this.captureHighlight(
@@ -1640,6 +1791,18 @@ export class SoccerGameEngine {
     // Post / Crossbar collisions
     this.checkGoalFrameCollisions();
 
+    // Near miss / Missed shot crowd reaction
+    if (this.playState === 'in_play' && this.shotActive) {
+      const pastLeftGoalLine = this.ball.x <= 55 && (this.ball.y < GOAL_Y_MIN || this.ball.y > GOAL_Y_MAX || this.ball.z > 70);
+      const pastRightGoalLine = this.ball.x >= PITCH_WIDTH - 55 && (this.ball.y < GOAL_Y_MIN || this.ball.y > GOAL_Y_MAX || this.ball.z > 70);
+      if (pastLeftGoalLine || pastRightGoalLine) {
+        this.shotActive = false;
+        this.shotTimer = 0;
+        retroAudio.playRandomCrowdMissedShot();
+        this.showMessage('MISSED CHANCE!', 'JUST WIDE OF THE POST!', 'whistle', 65);
+      }
+    }
+
     // Sideline / Goal-line boundaries
     if (this.playState === 'in_play') {
       if (this.ball.y < 35 || this.ball.y > PITCH_HEIGHT - 35) {
@@ -1670,7 +1833,9 @@ export class SoccerGameEngine {
       if (d < postRadius && this.ball.z <= 75) {
         this.ball.vx = -this.ball.vx * 0.75 + (Math.random() - 0.5) * 4;
         this.ball.vy = -this.ball.vy * 0.75 + (Math.random() - 0.5) * 4;
-        retroAudio.playPostClang();
+        this.shotActive = false;
+        this.shotTimer = 0;
+        retroAudio.playRandomCrowdWoodwork();
         this.showMessage('OFF THE POST!', 'CLATTERING WOODWORK', 'save', 70);
 
         this.captureHighlight(
@@ -1727,24 +1892,45 @@ export class SoccerGameEngine {
   }
 
   private updateNetPhysics() {
-    // Left net mesh relax
-    this.leftNetMesh.forEach((row) =>
-      row.forEach((pt) => {
-        pt.vx *= 0.85;
-        pt.vy *= 0.85;
-        pt.x += pt.vx;
-        pt.y += pt.vy;
-      })
-    );
-    // Right net mesh relax
-    this.rightNetMesh.forEach((row) =>
-      row.forEach((pt) => {
-        pt.vx *= 0.85;
-        pt.vy *= 0.85;
-        pt.x += pt.vx;
-        pt.y += pt.vy;
-      })
-    );
+    const k = 0.16;       // Spring tension constant
+    const damping = 0.85; // Air and cloth damping
+    const ballPushRadius = 26;
+
+    const updateMesh = (mesh: NetPoint[][], isLeftGoal: boolean) => {
+      mesh.forEach((row, r) => {
+        row.forEach((pt, c) => {
+          // Anchored posts: front top and bottom posts stay fixed
+          const isFrontPostAnchor = (c === 0 && (r === 0 || r === mesh.length - 1));
+          if (isFrontPostAnchor) {
+            pt.x = pt.originX;
+            pt.y = pt.originY;
+            pt.vx = 0;
+            pt.vy = 0;
+            return;
+          }
+
+          // Dynamic ball interaction: if ball pushes into net
+          const distToBall = Math.hypot(this.ball.x - pt.x, this.ball.y - pt.y);
+          if (distToBall < ballPushRadius && this.ball.z < 65) {
+            const overlap = (ballPushRadius - distToBall) / ballPushRadius;
+            const pushDirX = isLeftGoal ? -1 : 1;
+            pt.vx += (this.ball.vx * 0.35 + pushDirX * 3.5) * overlap;
+            pt.vy += (this.ball.vy * 0.35 + (pt.y - this.ball.y) * 0.1) * overlap;
+          }
+
+          // Hooke's Law spring back towards rest origin
+          const fx = (pt.originX - pt.x) * k;
+          const fy = (pt.originY - pt.y) * k;
+          pt.vx = (pt.vx + fx) * damping;
+          pt.vy = (pt.vy + fy) * damping;
+          pt.x += pt.vx;
+          pt.y += pt.vy;
+        });
+      });
+    };
+
+    updateMesh(this.leftNetMesh, true);
+    updateMesh(this.rightNetMesh, false);
   }
 
   private updateCamera() {

@@ -309,17 +309,77 @@ export class SoccerRenderer {
     ctx.stroke();
   }
 
-  // --- 3D Net & Goal Post Rendering ---
-  private drawGoalLeft(engine: SoccerGameEngine) {
+  // --- Realistic 3D Net, Stanchions & Goal Post Rendering ---
+  private drawRealisticGoal(engine: SoccerGameEngine, isLeft: boolean) {
     const ctx = this.ctx;
-    const goalX = 40;
-    const netMesh = engine.leftNetMesh;
+    const netMesh = isLeft ? engine.leftNetMesh : engine.rightNetMesh;
+    if (!netMesh || netMesh.length === 0) return;
 
-    // Draw flexible net mesh lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.lineWidth = 1.5;
+    const goalX = isLeft ? 45 : PITCH_WIDTH - 45;
+    const depthDir = isLeft ? -1 : 1;
+    const backX = goalX + depthDir * 65;
+    const topY = GOAL_Y_MIN;
+    const bottomY = GOAL_Y_MAX;
 
-    // Horizontal lines
+    ctx.save();
+
+    // 1. Goal Interior Turf Ambient Shadow (Deep 3D cavity shadow)
+    const backTopPt = netMesh[0][netMesh[0].length - 1];
+    const backBottomPt = netMesh[netMesh.length - 1][netMesh[0].length - 1];
+
+    ctx.beginPath();
+    ctx.moveTo(goalX, topY);
+    ctx.lineTo(backTopPt.x, backTopPt.y);
+    ctx.lineTo(backBottomPt.x, backBottomPt.y);
+    ctx.lineTo(goalX, bottomY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(2, 22, 10, 0.45)';
+    ctx.fill();
+
+    // 2. Net Fabric Translucent Backing (Gives tangible physical cloth volume)
+    ctx.fillStyle = 'rgba(240, 248, 255, 0.08)';
+    ctx.fill();
+
+    // 3. Diagonal Support Stanchions (Steel back tension poles & ground anchor frame)
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.beginPath();
+    // Top stanchion arm extending back from top post
+    ctx.moveTo(goalX, topY);
+    ctx.lineTo(backX + depthDir * 8, topY - 14);
+    ctx.lineTo(backX + depthDir * 16, topY - 6);
+    // Bottom stanchion arm extending back from bottom post
+    ctx.moveTo(goalX, bottomY);
+    ctx.lineTo(backX + depthDir * 8, bottomY + 14);
+    ctx.lineTo(backX + depthDir * 16, bottomY + 6);
+    // Rear ground tension bar
+    ctx.lineTo(backX + depthDir * 16, topY - 6);
+    ctx.stroke();
+
+    // Steel anchor ground plates
+    ctx.fillStyle = '#64748b';
+    ctx.beginPath();
+    ctx.arc(backX + depthDir * 16, topY - 6, 4.5, 0, Math.PI * 2);
+    ctx.arc(backX + depthDir * 16, bottomY + 6, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 4. Net Cord Shadow Layer on Pitch Turf
+    ctx.strokeStyle = 'rgba(0, 15, 5, 0.32)';
+    ctx.lineWidth = 1.6;
+    for (let r = 0; r < netMesh.length; r++) {
+      ctx.beginPath();
+      for (let c = 0; c < netMesh[r].length; c++) {
+        const pt = netMesh[r][c];
+        if (c === 0) ctx.moveTo(pt.x + 1.5, pt.y + 1.5);
+        else ctx.lineTo(pt.x + 1.5, pt.y + 1.5);
+      }
+      ctx.stroke();
+    }
+
+    // 5. Authentic Interlocking Diamond Netting (Honeycomb / Diamond Weave)
+    // Primary white net cords (Horizontal)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.lineWidth = 1.4;
     for (let r = 0; r < netMesh.length; r++) {
       ctx.beginPath();
       for (let c = 0; c < netMesh[r].length; c++) {
@@ -329,7 +389,8 @@ export class SoccerRenderer {
       }
       ctx.stroke();
     }
-    // Vertical lines
+
+    // Primary white net cords (Vertical)
     for (let c = 0; c < netMesh[0].length; c++) {
       ctx.beginPath();
       for (let r = 0; r < netMesh.length; r++) {
@@ -340,61 +401,117 @@ export class SoccerRenderer {
       ctx.stroke();
     }
 
-    // Goal Frame Posts & Crossbar
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 6;
+    // Diagonal diamond weave cords (gives genuine World Cup / Champions League net structure)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.38)';
+    ctx.lineWidth = 1.1;
+    for (let r = 0; r < netMesh.length - 1; r++) {
+      for (let c = 0; c < netMesh[0].length - 1; c++) {
+        const p1 = netMesh[r][c];
+        const p2 = netMesh[r + 1][c + 1];
+        const p3 = netMesh[r + 1][c];
+        const p4 = netMesh[r][c + 1];
+
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.moveTo(p3.x, p3.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.stroke();
+      }
+    }
+
+    // Net cord knots at lattice intersections
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    for (let r = 1; r < netMesh.length - 1; r += 2) {
+      for (let c = 1; c < netMesh[0].length; c++) {
+        const pt = netMesh[r][c];
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 6. Base Ground Skirt / Net Anchor Bar
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(goalX, GOAL_Y_MIN);
-    ctx.lineTo(goalX, GOAL_Y_MAX);
+    ctx.moveTo(goalX, bottomY);
+    ctx.lineTo(netMesh[netMesh.length - 1][netMesh[0].length - 1].x, bottomY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(goalX, topY);
+    ctx.lineTo(netMesh[0][netMesh[0].length - 1].x, topY);
     ctx.stroke();
 
-    // Top post cap
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillRect(goalX - 3, GOAL_Y_MIN - 4, 8, 8);
-    ctx.fillRect(goalX - 3, GOAL_Y_MAX - 4, 8, 8);
+    // 7. Cylindrical 3D White Goal Posts & Crossbar
+    // Post drop shadows onto turf
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+    ctx.beginPath();
+    ctx.ellipse(goalX + depthDir * 2, topY + 4, 7, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(goalX + depthDir * 2, bottomY + 4, 7, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ground mounting ring plates where posts enter turf
+    ctx.fillStyle = '#64748b';
+    ctx.beginPath();
+    ctx.arc(goalX, topY, 6, 0, Math.PI * 2);
+    ctx.arc(goalX, bottomY, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Front Uprights & Crossbar with 3D metallic highlights
+    // Dark outer edge for 3D bevel depth
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 7.5;
+    ctx.beginPath();
+    ctx.moveTo(goalX, topY);
+    ctx.lineTo(goalX, bottomY);
+    ctx.stroke();
+
+    // Pure white core cylinder
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5.5;
+    ctx.beginPath();
+    ctx.moveTo(goalX, topY);
+    ctx.lineTo(goalX, bottomY);
+    ctx.stroke();
+
+    // Specular highlight reflection line
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    ctx.moveTo(goalX - (isLeft ? 1 : -1), topY);
+    ctx.lineTo(goalX - (isLeft ? 1 : -1), bottomY);
+    ctx.stroke();
+
+    // Post corner elbows / caps with 3D shine
+    const drawPostCap = (y: number) => {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(goalX, y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Specular shine point
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(goalX - (isLeft ? 1.5 : -1.5), y - 1.5, 2, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
+    drawPostCap(topY);
+    drawPostCap(bottomY);
+
+    ctx.restore();
+  }
+
+  private drawGoalLeft(engine: SoccerGameEngine) {
+    this.drawRealisticGoal(engine, true);
   }
 
   private drawGoalRight(engine: SoccerGameEngine) {
-    const ctx = this.ctx;
-    const goalX = PITCH_WIDTH - 40;
-    const netMesh = engine.rightNetMesh;
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.lineWidth = 1.5;
-
-    // Horizontal lines
-    for (let r = 0; r < netMesh.length; r++) {
-      ctx.beginPath();
-      for (let c = 0; c < netMesh[r].length; c++) {
-        const pt = netMesh[r][c];
-        if (c === 0) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
-      }
-      ctx.stroke();
-    }
-    // Vertical lines
-    for (let c = 0; c < netMesh[0].length; c++) {
-      ctx.beginPath();
-      for (let r = 0; r < netMesh.length; r++) {
-        const pt = netMesh[r][c];
-        if (r === 0) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
-      }
-      ctx.stroke();
-    }
-
-    // Goal Frame
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(goalX, GOAL_Y_MIN);
-    ctx.lineTo(goalX, GOAL_Y_MAX);
-    ctx.stroke();
-
-    // Caps
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillRect(goalX - 5, GOAL_Y_MIN - 4, 8, 8);
-    ctx.fillRect(goalX - 5, GOAL_Y_MAX - 4, 8, 8);
+    this.drawRealisticGoal(engine, false);
   }
 
   // --- Corner Flags ---

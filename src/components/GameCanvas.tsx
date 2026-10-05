@@ -5,7 +5,7 @@ import { MatchSettings, Team, CommentaryToast } from '../types/game';
 import { retroAudio } from '../audio/retroAudio';
 import { CommentaryToastBox } from './CommentaryToastBox';
 import { LiveMatchHUD, LiveStatsData, HUDViewMode } from './LiveMatchHUD';
-import { Pause, Play, RotateCcw, Volume2, VolumeX, ArrowLeft, BarChart2, Maximize2, Minimize2, Monitor } from 'lucide-react';
+import { Pause, Play, RotateCcw, Volume2, VolumeX, ArrowLeft, BarChart2, Maximize2, Minimize2, Monitor, Bot } from 'lucide-react';
 
 interface GameCanvasProps {
   homeTeam: Team;
@@ -34,6 +34,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [matchPeriod, setMatchPeriod] = useState<'1ST' | '2ND' | 'HT' | 'FT'>('1ST');
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
+  const [autoPlay, setAutoPlay] = useState(Boolean(settings.autoPlay));
+
+  const toggleAutoPlay = useCallback(() => {
+    setAutoPlay((prev) => {
+      const next = !prev;
+      if (engineRef.current) {
+        engineRef.current.setAutoPlay(next);
+      }
+      retroAudio.playMenuBeep();
+      return next;
+    });
+  }, []);
+
   const [commentaryToast, setCommentaryToast] = useState<CommentaryToast | null>(null);
 
   // 16:9 Widescreen & Fullscreen States for Chromebooks / Windows Laptops
@@ -162,7 +175,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         toggleFullscreen();
       }
 
-      // 16:9 Aspect Ratio toggle [KeyA]
+      // Auto Mode toggle [KeyA] (without ctrl/alt)
+      if (e.code === 'KeyA' && !e.ctrlKey && !e.altKey && !settings.twoPlayer) {
+        e.preventDefault();
+        toggleAutoPlay();
+      }
+
+      // 16:9 Aspect Ratio toggle [Ctrl+A or Alt+A]
       if (e.code === 'KeyA' && (e.ctrlKey || e.altKey)) {
         e.preventDefault();
         setIsAspect169((v) => !v);
@@ -434,6 +453,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             <span>[R]</span>
           </button>
 
+          {/* Auto Mode Toggle Button [A] */}
+          {!settings.twoPlayer && (
+            <button
+              onClick={toggleAutoPlay}
+              className={`p-1 sm:p-1.5 border text-xs font-arcade flex items-center gap-1 cursor-pointer transition-all ${
+                autoPlay
+                  ? 'border-cyan-400 bg-cyan-950/90 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+                  : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-cyan-300 hover:border-slate-600'
+              }`}
+              title="Auto Mode [A] (AI controls Home Team with manual takeover)"
+            >
+              <Bot className={`w-3.5 h-3.5 ${autoPlay ? 'text-cyan-400 animate-pulse' : ''}`} />
+              <span className="font-pixel text-[9px] font-bold">
+                AUTO {autoPlay ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          )}
+
           {/* Pause Button */}
           <button
             onClick={togglePause}
@@ -480,6 +517,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           </div>
         )}
       </div>
+
+      {/* Auto Pilot Active Status Pill */}
+      {autoPlay && !isPaused && (
+        <div className="absolute top-13 left-2 sm:left-4 z-20 pointer-events-none transition-all">
+          <div className="flex items-center gap-2 px-2 sm:px-2.5 py-1 bg-slate-950/90 border border-cyan-400/80 shadow-lg shadow-cyan-950/60 backdrop-blur-xs rounded-xs">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shrink-0" />
+            <span className="font-pixel text-[8px] sm:text-[9px] text-cyan-300 tracking-wider">
+              🤖 AUTO MODE ACTIVE
+            </span>
+            <span className="font-arcade text-[9px] text-slate-400 hidden sm:inline">
+              (Press [A] to toggle · Use keys/touch to take over)
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Virtual Touch Controls (Visible only on compact touch mobile screens) */}
       <div className="md:hidden absolute bottom-3 left-3 right-3 z-20 flex justify-between items-end pointer-events-none">
@@ -572,6 +624,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               >
                 RESUME MATCH [ESC]
               </button>
+
+              {!settings.twoPlayer && (
+                <button
+                  onClick={() => {
+                    toggleAutoPlay();
+                  }}
+                  className={`w-full py-2.5 font-bold border transition-colors cursor-pointer flex items-center justify-center gap-2 ${
+                    autoPlay
+                      ? 'bg-cyan-950 text-cyan-300 border-cyan-400 hover:bg-cyan-900'
+                      : 'bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700'
+                  }`}
+                >
+                  <Bot className="w-4 h-4 text-cyan-400" />
+                  <span>AUTO MODE: {autoPlay ? 'ENABLED [ON]' : 'DISABLED [OFF]'}</span>
+                </button>
+              )}
 
               <button
                 onClick={() => {

@@ -12,6 +12,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { TournamentBracket } from './components/TournamentBracket';
 import { PenaltyShootout } from './components/PenaltyShootout';
 import { TrainingMode } from './components/TrainingMode';
+import { CareerMode } from './components/CareerMode';
 import { MatchSummaryModal } from './components/MatchSummaryModal';
 import { ControlsModal } from './components/ControlsModal';
 import { PlayerDatabaseModal } from './components/PlayerDatabaseModal';
@@ -25,7 +26,8 @@ type AppScreen =
   | 'TOURNAMENT_BRACKET'
   | 'MATCH'
   | 'PENALTIES'
-  | 'TRAINING';
+  | 'TRAINING'
+  | 'CAREER';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('TITLE');
@@ -58,6 +60,9 @@ export default function App() {
   // Tournament Callback State
   const [tournamentWinCallback, setTournamentWinCallback] = useState<(() => void) | null>(null);
 
+  // Career Match Callback State
+  const [careerMatchCallback, setCareerMatchCallback] = useState<((res: { homeScore: number; awayScore: number }) => void) | null>(null);
+
   // Match Summary State
   const [finishedEngine, setFinishedEngine] = useState<SoccerGameEngine | null>(null);
   const [showControlsModal, setShowControlsModal] = useState(false);
@@ -85,6 +90,8 @@ export default function App() {
       setCurrentScreen('PENALTIES');
     } else if (mode === 'training') {
       setCurrentScreen('TRAINING');
+    } else if (mode === 'career') {
+      setCurrentScreen('CAREER');
     }
   };
 
@@ -110,6 +117,15 @@ export default function App() {
     setCurrentScreen('MATCH');
   };
 
+  const handlePlayCareerMatch = (home: Team, away: Team, onComplete: (res: { homeScore: number; awayScore: number }) => void) => {
+    setHomeTeam(home);
+    setAwayTeam(away);
+    setSettings((s) => ({ ...s, mode: 'career', twoPlayer: false }));
+    setCareerMatchCallback(() => onComplete);
+    setFinishedEngine(null);
+    setCurrentScreen('MATCH');
+  };
+
   const handleMatchComplete = (result: { homeScore: number; awayScore: number; engine: SoccerGameEngine }) => {
     setFinishedEngine(result.engine);
 
@@ -121,6 +137,11 @@ export default function App() {
         tournamentWinCallback();
       }
     }
+
+    // If career match, invoke career progression callback
+    if (settings.mode === 'career' && careerMatchCallback) {
+      careerMatchCallback({ homeScore: result.homeScore, awayScore: result.awayScore });
+    }
   };
 
   const handlePlayAgain = () => {
@@ -131,6 +152,8 @@ export default function App() {
     setFinishedEngine(null);
     if (settings.mode === 'tournament') {
       setCurrentScreen('TOURNAMENT_BRACKET');
+    } else if (settings.mode === 'career') {
+      setCurrentScreen('CAREER');
     } else {
       setCurrentScreen('TITLE');
     }
@@ -208,6 +231,14 @@ export default function App() {
       {/* 7. Training Mode */}
       {currentScreen === 'TRAINING' && (
         <TrainingMode onBack={() => setCurrentScreen('TITLE')} />
+      )}
+
+      {/* 8. Career Mode (Road to Glory & Card Trading) */}
+      {currentScreen === 'CAREER' && (
+        <CareerMode
+          onBackToTitle={() => setCurrentScreen('TITLE')}
+          onLaunchMatch={handlePlayCareerMatch}
+        />
       )}
 
       {/* Match Summary Modal Overlay */}

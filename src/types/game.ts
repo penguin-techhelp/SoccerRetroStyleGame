@@ -1,4 +1,4 @@
-export type GameMode = 'exhibition' | 'tournament' | 'penalties' | 'training';
+export type GameMode = 'exhibition' | 'tournament' | 'penalties' | 'training' | 'career';
 
 export type Difficulty = 'amateur' | 'semi-pro' | 'world-class';
 
@@ -193,4 +193,5 @@ export interface MatchSettings {
   soundEnabled: boolean;
   aspectRatio169: boolean;     // True = strict 16:9 arcade framing, False = stretch to window
   performanceMode: 'standard' | 'eco'; // 'eco' optimizes crowd, particles, and shadows for Chromebooks/laptops
+  autoPlay?: boolean;          // Auto Mode: AI plays on behalf of user team with manual override
 }

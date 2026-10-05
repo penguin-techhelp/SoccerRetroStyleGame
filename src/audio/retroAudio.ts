@@ -252,94 +252,423 @@ class RetroAudioEngine {
     noise.start(t);
   }
 
-  /** Crowd Gasp ("Oooooh!") */
-  public playCrowdGasp() {
+  /**
+   * Procedural Randomized Crowd Reaction Sound Suite
+   * Dynamically triggers authentic stadium reactions for missed shots, fouls,
+   * red card uproars, goalkeeper saves, and goal celebrations.
+   */
+
+  /** Missed Shot Reaction (Randomized: 3 variations of collective agonizing gasps & groans) */
+  public playRandomCrowdMissedShot() {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx || !this.masterGain) return;
+
+    const variant = Math.floor(Math.random() * 3);
+    const t = this.ctx.currentTime;
+
+    if (variant === 0) {
+      // Variation A: The Classic Agonized Crowd Groan ("Oooooh-aaah!")
+      const osc1 = this.ctx.createOscillator();
+      const osc2 = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc1.type = 'triangle';
+      osc2.type = 'sine';
+      osc1.frequency.setValueAtTime(290, t);
+      osc1.frequency.exponentialRampToValueAtTime(140, t + 0.65);
+      osc2.frequency.setValueAtTime(215, t);
+      osc2.frequency.exponentialRampToValueAtTime(110, t + 0.7);
+
+      gain.gain.setValueAtTime(0.01, t);
+      gain.gain.linearRampToValueAtTime(0.28, t + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc1.start(t);
+      osc2.start(t);
+      osc1.stop(t + 0.76);
+      osc2.stop(t + 0.76);
+    } else if (variant === 1) {
+      // Variation B: Staccato Shock Shout ("Aaaaah!")
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(320, t);
+      osc.frequency.linearRampToValueAtTime(180, t + 0.45);
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(650, t);
+      filter.frequency.exponentialRampToValueAtTime(250, t + 0.45);
+
+      gain.gain.setValueAtTime(0.01, t);
+      gain.gain.linearRampToValueAtTime(0.3, t + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(t);
+      osc.stop(t + 0.52);
+    } else {
+      // Variation C: The Two-Tone Head-in-Hands Sigh ("Ohhh-no!")
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(240, t);
+      osc.frequency.setValueAtTime(220, t + 0.15);
+      osc.frequency.exponentialRampToValueAtTime(120, t + 0.8);
+
+      gain.gain.setValueAtTime(0.01, t);
+      gain.gain.linearRampToValueAtTime(0.24, t + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(t);
+      osc.stop(t + 0.86);
+    }
+  }
+
+  /** Crowd Foul Reaction (Randomized: Outraged shouts, jeers, boos, and whistle harmonics) */
+  public playRandomCrowdFoul() {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx || !this.masterGain) return;
+
+    const variant = Math.floor(Math.random() * 3);
+    const t = this.ctx.currentTime;
+
+    if (variant === 0) {
+      // Variation A: Indignant Crowd Shouting ("Heeeyyy!!")
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(190, t);
+      osc.frequency.linearRampToValueAtTime(260, t + 0.12);
+      osc.frequency.exponentialRampToValueAtTime(140, t + 0.55);
+
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(750, t);
+      filter.Q.setValueAtTime(1.8, t);
+
+      gain.gain.setValueAtTime(0.01, t);
+      gain.gain.linearRampToValueAtTime(0.28, t + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(t);
+      osc.stop(t + 0.62);
+    } else if (variant === 1) {
+      // Variation B: Crowd Jeers & Spectator Whistles ("Boooo!")
+      const booOsc = this.ctx.createOscillator();
+      const booGain = this.ctx.createGain();
+      booOsc.type = 'triangle';
+      booOsc.frequency.setValueAtTime(130, t);
+      booOsc.frequency.exponentialRampToValueAtTime(95, t + 0.7);
+
+      booGain.gain.setValueAtTime(0.01, t);
+      booGain.gain.linearRampToValueAtTime(0.26, t + 0.08);
+      booGain.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+
+      booOsc.connect(booGain);
+      booGain.connect(this.masterGain);
+      booOsc.start(t);
+      booOsc.stop(t + 0.76);
+
+      // Spectator whistle chirp
+      const whistleOsc = this.ctx.createOscillator();
+      const whistleGain = this.ctx.createGain();
+      whistleOsc.type = 'sine';
+      whistleOsc.frequency.setValueAtTime(2500, t + 0.05);
+      whistleOsc.frequency.linearRampToValueAtTime(2350, t + 0.35);
+
+      whistleGain.gain.setValueAtTime(0.01, t + 0.05);
+      whistleGain.gain.linearRampToValueAtTime(0.12, t + 0.12);
+      whistleGain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+
+      whistleOsc.connect(whistleGain);
+      whistleGain.connect(this.masterGain);
+      whistleOsc.start(t + 0.05);
+      whistleOsc.stop(t + 0.36);
+    } else {
+      // Variation C: Visceral Tackle Impact Gasp & Shock
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(175, t);
+      osc.frequency.linearRampToValueAtTime(110, t + 0.45);
+
+      gain.gain.setValueAtTime(0.01, t);
+      gain.gain.linearRampToValueAtTime(0.32, t + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.52);
+    }
+  }
+
+  /** Red Card Uproar: Prolonged stadium uproar, whistles and sustained boos */
+  public playRandomCrowdRedCardUproar() {
     if (this.isMuted) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
     const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(220, t);
-    osc.frequency.linearRampToValueAtTime(160, t + 0.5);
 
-    gain.gain.setValueAtTime(0.0, t);
-    gain.gain.linearRampToValueAtTime(0.25, t + 0.1);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    // Double sharp referee whistle
+    this.playWhistle(true);
 
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(t);
-    osc.stop(t + 0.6);
+    // Deep sustained booing roar
+    const booOsc1 = this.ctx.createOscillator();
+    const booOsc2 = this.ctx.createOscillator();
+    const booGain = this.ctx.createGain();
+
+    booOsc1.type = 'sawtooth';
+    booOsc2.type = 'triangle';
+    booOsc1.frequency.setValueAtTime(125, t + 0.1);
+    booOsc1.frequency.linearRampToValueAtTime(90, t + 1.6);
+    booOsc2.frequency.setValueAtTime(130, t + 0.1);
+    booOsc2.frequency.linearRampToValueAtTime(85, t + 1.6);
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(380, t);
+
+    booGain.gain.setValueAtTime(0.01, t + 0.1);
+    booGain.gain.linearRampToValueAtTime(0.35, t + 0.25);
+    booGain.gain.exponentialRampToValueAtTime(0.001, t + 1.7);
+
+    booOsc1.connect(filter);
+    booOsc2.connect(filter);
+    filter.connect(booGain);
+    booGain.connect(this.masterGain);
+
+    booOsc1.start(t + 0.1);
+    booOsc2.start(t + 0.1);
+    booOsc1.stop(t + 1.72);
+    booOsc2.stop(t + 1.72);
+
+    // Staccato angry whistle blasts
+    const playWhistleBlast = (delay: number) => {
+      if (!this.ctx || !this.masterGain) return;
+      const wt = t + delay;
+      const wOsc = this.ctx.createOscillator();
+      const wGain = this.ctx.createGain();
+      wOsc.type = 'sine';
+      wOsc.frequency.setValueAtTime(2600 + Math.random() * 200, wt);
+
+      wGain.gain.setValueAtTime(0.01, wt);
+      wGain.gain.linearRampToValueAtTime(0.14, wt + 0.05);
+      wGain.gain.exponentialRampToValueAtTime(0.001, wt + 0.35);
+
+      wOsc.connect(wGain);
+      wGain.connect(this.masterGain);
+      wOsc.start(wt);
+      wOsc.stop(wt + 0.36);
+    };
+
+    playWhistleBlast(0.25);
+    playWhistleBlast(0.65);
+    playWhistleBlast(1.05);
   }
 
-  /** Goal Cheer & Stadium Horn Fanfare */
-  public playGoalCelebration() {
+  /** Goalkeeper Save Reaction (Randomized: relief roars, acclaim, and applause) */
+  public playRandomCrowdSave() {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx || !this.masterGain) return;
+
+    const variant = Math.floor(Math.random() * 2);
+    const t = this.ctx.currentTime;
+
+    if (variant === 0) {
+      // Relief Roar & Acclaim ("Yeeaaah!")
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(170, t);
+      osc.frequency.linearRampToValueAtTime(310, t + 0.18);
+      osc.frequency.exponentialRampToValueAtTime(160, t + 0.7);
+
+      gain.gain.setValueAtTime(0.01, t);
+      gain.gain.linearRampToValueAtTime(0.32, t + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.76);
+    } else {
+      // Acclaiming Applause & Cheer Wave
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, t);
+      osc.frequency.linearRampToValueAtTime(340, t + 0.22);
+      osc.frequency.exponentialRampToValueAtTime(180, t + 0.8);
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(600, t);
+
+      gain.gain.setValueAtTime(0.01, t);
+      gain.gain.linearRampToValueAtTime(0.3, t + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.86);
+    }
+  }
+
+  /** Woodwork Strike Reaction: Loud crossbar clang + collective shock & groan */
+  public playRandomCrowdWoodwork() {
+    this.playPostClang();
+    this.playRandomCrowdMissedShot();
+  }
+
+  /** Goal Celebration (Randomized: 3 epic stadium celebration styles) */
+  public playRandomGoalCelebration() {
     if (this.isMuted) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
     this.playWhistle(true);
+    const variant = Math.floor(Math.random() * 3);
+    const t = this.ctx.currentTime;
 
-    // Stadium air horn blasts (2 short, 1 long)
+    // Helper: stadium air horn
     const playHorn = (delay: number, dur: number, note: number = 311.13) => {
       if (!this.ctx || !this.masterGain) return;
-      const t = this.ctx.currentTime + delay;
+      const ht = this.ctx.currentTime + delay;
       const osc = this.ctx.createOscillator();
       const osc2 = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
 
       osc.type = 'sawtooth';
       osc2.type = 'sawtooth';
-      osc.frequency.setValueAtTime(note, t);
-      osc2.frequency.setValueAtTime(note * 1.5, t); // perfect fifth
+      osc.frequency.setValueAtTime(note, ht);
+      osc2.frequency.setValueAtTime(note * 1.5, ht); // perfect fifth
 
-      gain.gain.setValueAtTime(0.22, t);
-      gain.gain.linearRampToValueAtTime(0.2, t + dur - 0.05);
-      gain.gain.linearRampToValueAtTime(0.001, t + dur);
+      gain.gain.setValueAtTime(0.22, ht);
+      gain.gain.linearRampToValueAtTime(0.2, ht + dur - 0.05);
+      gain.gain.linearRampToValueAtTime(0.001, ht + dur);
 
       osc.connect(gain);
       osc2.connect(gain);
       gain.connect(this.masterGain);
 
-      osc.start(t);
-      osc2.start(t);
-      osc.stop(t + dur);
-      osc2.stop(t + dur);
+      osc.start(ht);
+      osc2.start(ht);
+      osc.stop(ht + dur);
+      osc2.stop(ht + dur);
     };
 
-    playHorn(0.3, 0.2);
-    playHorn(0.55, 0.2);
-    playHorn(0.85, 0.7);
+    if (variant === 0) {
+      // Style 1: Stadium Air Horn Fanfare (2 short, 1 long blast) + Victory Arpeggio
+      playHorn(0.25, 0.18);
+      playHorn(0.48, 0.18);
+      playHorn(0.75, 0.65);
 
-    // Retro victory chime arpeggio
-    const melody = [
-      { note: 261.63, time: 0.1 },  // C4
-      { note: 329.63, time: 0.25 }, // E4
-      { note: 392.00, time: 0.4 },  // G4
-      { note: 523.25, time: 0.6 },  // C5
-      { note: 659.25, time: 0.8 },  // E5
-      { note: 783.99, time: 1.0 },  // G5
-    ];
+      const melody = [
+        { note: 261.63, time: 0.1 },  // C4
+        { note: 329.63, time: 0.25 }, // E4
+        { note: 392.00, time: 0.4 },  // G4
+        { note: 523.25, time: 0.6 },  // C5
+        { note: 659.25, time: 0.8 },  // E5
+        { note: 783.99, time: 1.0 },  // G5
+      ];
 
-    melody.forEach(({ note, time }) => {
-      if (!this.ctx || !this.masterGain) return;
-      const t = this.ctx.currentTime + time;
-      const osc = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(note, t);
+      melody.forEach(({ note, time }) => {
+        if (!this.ctx || !this.masterGain) return;
+        const mt = this.ctx.currentTime + time;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(note, mt);
 
-      g.gain.setValueAtTime(0.15, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        g.gain.setValueAtTime(0.15, mt);
+        g.gain.exponentialRampToValueAtTime(0.001, mt + 0.35);
 
-      osc.connect(g);
-      g.connect(this.masterGain);
-      osc.start(t);
-      osc.stop(t + 0.36);
-    });
+        osc.connect(g);
+        g.connect(this.masterGain);
+        osc.start(mt);
+        osc.stop(mt + 0.36);
+      });
+    } else if (variant === 1) {
+      // Style 2: The Stadium Chant & Horn Surge ("Ole, Ole, Ole!")
+      playHorn(0.2, 0.3, 261.63); // C4
+      playHorn(0.55, 0.3, 329.63); // E4
+      playHorn(0.9, 0.55, 392.00); // G4
+
+      // Rhythmic stadium roar pulses
+      [0.15, 0.5, 0.85, 1.2].forEach((time, idx) => {
+        if (!this.ctx || !this.masterGain) return;
+        const rt = this.ctx.currentTime + time;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(180 + idx * 25, rt);
+        osc.frequency.linearRampToValueAtTime(260 + idx * 30, rt + 0.15);
+        osc.frequency.exponentialRampToValueAtTime(120, rt + 0.35);
+
+        g.gain.setValueAtTime(0.01, rt);
+        g.gain.linearRampToValueAtTime(0.25, rt + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.001, rt + 0.36);
+
+        osc.connect(g);
+        g.connect(this.masterGain);
+        osc.start(rt);
+        osc.stop(rt + 0.37);
+      });
+    } else {
+      // Style 3: Sub-Bass Boom & Triumphant Stadium Surge
+      const subOsc = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      subOsc.type = 'sine';
+      subOsc.frequency.setValueAtTime(65, t);
+      subOsc.frequency.exponentialRampToValueAtTime(35, t + 0.8);
+
+      subGain.gain.setValueAtTime(0.4, t);
+      subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+
+      subOsc.connect(subGain);
+      subGain.connect(this.masterGain);
+      subOsc.start(t);
+      subOsc.stop(t + 0.86);
+
+      // Double power horn fanfare
+      playHorn(0.18, 0.45, 293.66); // D4
+      playHorn(0.7, 0.85, 369.99);  // F#4
+    }
+  }
+
+  /** Legacy alias for crowd gasp */
+  public playCrowdGasp() {
+    this.playRandomCrowdMissedShot();
+  }
+
+  /** Legacy alias for goal celebration */
+  public playGoalCelebration() {
+    this.playRandomGoalCelebration();
   }
 
   /** Continuous Ambient Crowd Noise that reacts dynamically to ball distance to goal */
@@ -403,7 +732,7 @@ class RetroAudioEngine {
 
     this.isMusicPlaying = true;
 
-    // Classic 90s Sega/SNES FIFA-inspired brassy bassline & arpeggio
+    // Classic 90s Sega/SNES Arcade-inspired brassy bassline & arpeggio
     // Key of F Minor / Ab Major
     const bassline = [
       174.61, 174.61, 207.65, 233.08, // F3, F3, Ab3, Bb3
