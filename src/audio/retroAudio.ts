@@ -581,22 +581,46 @@ class RetroAudioEngine {
       if (!cleanText) return;
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.12; // Natural, energetic broadcast cadence
-      utterance.pitch = 1.05; // Slightly elevated announcer inflection
-      utterance.volume = 0.95;
+      utterance.rate = 1.04; // Dramatic, authoritative television broadcast cadence
+      utterance.pitch = 0.98; // Rich, resonant broadcast announcer pitch
+      utterance.volume = 1.0;
 
       const voices = window.speechSynthesis.getVoices();
+      const isUK = (v: SpeechSynthesisVoice) =>
+        v.lang.replace('_', '-').toLowerCase().startsWith('en-gb');
+      const isEnglish = (v: SpeechSynthesisVoice) =>
+        v.lang.toLowerCase().startsWith('en');
+
+      // Prioritize authentic British football commentator voices (Peter Drury / Martin Tyler broadcast style)
       const preferredVoice =
+        // 1. UK Natural/Neural/Broadcast male voices
         voices.find(
           (v) =>
-            v.lang.startsWith('en') &&
+            isUK(v) &&
             (v.name.includes('Natural') ||
-              v.name.includes('Google') ||
-              v.name.includes('David') ||
+              v.name.includes('Neural') ||
+              v.name.includes('Google UK English Male') ||
+              v.name.includes('Daniel') ||
+              v.name.includes('Oliver') ||
+              v.name.includes('George') ||
+              v.name.includes('Arthur') ||
+              v.name.includes('Ryan') ||
+              v.name.includes('Malcolm'))
+        ) ||
+        // 2. Any UK English voice
+        voices.find((v) => isUK(v)) ||
+        // 3. Natural broadcast male English voices (Guy, David, Alex)
+        voices.find(
+          (v) =>
+            isEnglish(v) &&
+            (v.name.includes('Natural') ||
+              v.name.includes('Neural') ||
               v.name.includes('Guy') ||
-              v.name.includes('UK') ||
-              v.name.includes('US'))
-        ) || voices.find((v) => v.lang.startsWith('en'));
+              v.name.includes('David') ||
+              v.name.includes('Alex'))
+        ) ||
+        // 4. Any English voice
+        voices.find((v) => isEnglish(v));
 
       if (preferredVoice) {
         utterance.voice = preferredVoice;

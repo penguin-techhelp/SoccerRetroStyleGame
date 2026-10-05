@@ -644,6 +644,7 @@ export class SoccerGameEngine {
         this.isHalftime = true;
         this.showMessage('HALF TIME', `${this.homeScore} - ${this.awayScore}`, 'halftime', 240);
         retroAudio.playWhistle(true);
+        this.emitCommentary('halftime', this.homeTeam.name, this.homeTeam.flag, 45);
       }
 
       // Full-time check
@@ -651,6 +652,7 @@ export class SoccerGameEngine {
         this.isFulltime = true;
         this.showMessage('FULL TIME', `${this.homeScore} - ${this.awayScore}`, 'fulltime', 300);
         retroAudio.playWhistle(true);
+        this.emitCommentary('fulltime', this.homeTeam.name, this.homeTeam.flag, 90);
       }
     }
 

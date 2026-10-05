@@ -160,9 +160,10 @@ export interface BannerMessage {
 
 export interface CommentaryToast {
   id: string;
-  type: 'goal' | 'save' | 'red_card' | 'yellow_card' | 'woodwork';
+  type: 'goal' | 'save' | 'red_card' | 'yellow_card' | 'woodwork' | 'halftime' | 'fulltime';
   headline: string;
   commentary: string;
+  spokenText?: string;
   playerName?: string;
   teamName: string;
   teamFlag?: string;

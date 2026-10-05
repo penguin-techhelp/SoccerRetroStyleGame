@@ -35,8 +35,9 @@ export const CommentaryToastBox: React.FC<CommentaryToastBoxProps> = ({ toast, o
 
     setProgress(100);
 
-    const speechText = `${toast.headline}. ${toast.commentary}`;
+    const speechText = toast.spokenText || toast.commentary;
     if (!voiceMuted) {
+      retroAudio.playCommentaryJingle();
       retroAudio.speakCommentary(
         speechText,
         () => setIsSpeaking(true),
@@ -45,20 +46,20 @@ export const CommentaryToastBox: React.FC<CommentaryToastBoxProps> = ({ toast, o
     }
 
     // Auto-dismiss timer (allowing full voice speech playback without cutoff)
-    const duration = Math.max(toast.durationMs || 6000, 6000);
-    const intervalTime = 60;
-    const step = (intervalTime / duration) * 100;
+    const duration = Math.max(toast.durationMs || 6500, 6500);
+    const intervalTime = 50;
+    const startTime = Date.now();
 
     clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      setProgress((prev) => {
-        if (prev <= step) {
-          clearInterval(timerRef.current);
-          onDismissRef.current();
-          return 0;
-        }
-        return prev - step;
-      });
+      const elapsed = Date.now() - startTime;
+      const remainingRatio = Math.max(0, 1 - elapsed / duration);
+      setProgress(remainingRatio * 100);
+
+      if (elapsed >= duration) {
+        clearInterval(timerRef.current);
+        onDismissRef.current();
+      }
     }, intervalTime);
   }, [toast, voiceMuted]);
 
@@ -80,7 +81,7 @@ export const CommentaryToastBox: React.FC<CommentaryToastBoxProps> = ({ toast, o
   const handleReplayAudio = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!toast) return;
-    const speechText = `${toast.headline}. ${toast.commentary}`;
+    const speechText = toast.spokenText || toast.commentary;
     retroAudio.playCommentaryJingle();
     retroAudio.speakCommentary(
       speechText,
@@ -97,7 +98,8 @@ export const CommentaryToastBox: React.FC<CommentaryToastBoxProps> = ({ toast, o
       retroAudio.stopCommentarySpeech();
       setIsSpeaking(false);
     } else if (toast) {
-      const speechText = `${toast.headline}. ${toast.commentary}`;
+      const speechText = toast.spokenText || toast.commentary;
+      retroAudio.playCommentaryJingle();
       retroAudio.speakCommentary(
         speechText,
         () => setIsSpeaking(true),
@@ -112,6 +114,9 @@ export const CommentaryToastBox: React.FC<CommentaryToastBoxProps> = ({ toast, o
   const isRedCard = toast.type === 'red_card';
   const isYellowCard = toast.type === 'yellow_card';
   const isSave = toast.type === 'save';
+  const isWoodwork = toast.type === 'woodwork';
+  const isHalftime = toast.type === 'halftime';
+  const isFulltime = toast.type === 'fulltime';
 
   const borderColor = isGoal
     ? 'border-yellow-400'
@@ -121,6 +126,10 @@ export const CommentaryToastBox: React.FC<CommentaryToastBoxProps> = ({ toast, o
     ? 'border-amber-400'
     : isSave
     ? 'border-emerald-400'
+    : isHalftime
+    ? 'border-indigo-400'
+    : isFulltime
+    ? 'border-yellow-400'
     : 'border-sky-400';
 
   const badgeBg = isGoal
@@ -131,6 +140,10 @@ export const CommentaryToastBox: React.FC<CommentaryToastBoxProps> = ({ toast, o
     ? 'bg-amber-400 text-slate-950'
     : isSave
     ? 'bg-emerald-500 text-slate-950'
+    : isHalftime
+    ? 'bg-indigo-600 text-white'
+    : isFulltime
+    ? 'bg-yellow-400 text-slate-950'
     : 'bg-sky-500 text-slate-950';
 
   const badgeLabel = isGoal
@@ -141,7 +154,11 @@ export const CommentaryToastBox: React.FC<CommentaryToastBoxProps> = ({ toast, o
     ? '🟨 BOOKING'
     : isSave
     ? '🧤 BIG SAVE'
-    : '🥅 WOODWORK';
+    : isWoodwork
+    ? '🥅 WOODWORK'
+    : isHalftime
+    ? '⏱️ HALF TIME'
+    : '🏆 FULL TIME';
 
   return (
     <div className="fixed top-14 right-2 sm:right-5 z-40 max-w-sm sm:max-w-md w-[94%] sm:w-auto select-none pointer-events-auto transition-all animate-arcade-toast">
@@ -240,12 +257,16 @@ export const CommentaryToastBox: React.FC<CommentaryToastBoxProps> = ({ toast, o
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800">
           <div
             className={`h-full transition-all duration-75 ${
-              isGoal
+              isGoal || isFulltime
                 ? 'bg-yellow-400'
                 : isRedCard
                 ? 'bg-rose-500'
+                : isYellowCard
+                ? 'bg-amber-400'
                 : isSave
                 ? 'bg-emerald-400'
+                : isHalftime
+                ? 'bg-indigo-400'
                 : 'bg-sky-400'
             }`}
             style={{ width: `${progress}%` }}
