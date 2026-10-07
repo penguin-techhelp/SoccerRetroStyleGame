@@ -51,8 +51,8 @@ export const LiveMatchHUD: React.FC<LiveMatchHUDProps> = ({
   // COMPACT MODE: Sleek broadcast ticker bar below scoreboard
   if (mode === 'compact') {
     return (
-      <div className="absolute top-12 sm:top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-auto transition-all duration-200">
-        <div className="flex items-center gap-2 sm:gap-3 px-3 py-1.5 bg-slate-950/95 border border-slate-700/80 shadow-2xl backdrop-blur-md rounded-xs">
+      <div className="absolute top-12 sm:top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-auto transition-all duration-200 max-w-[95vw]">
+        <div className="flex items-center gap-2 sm:gap-3 px-3 py-1.5 bg-slate-950/95 border border-slate-700/80 shadow-2xl backdrop-blur-md rounded-xs overflow-x-auto">
           {/* Home team indicator */}
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="text-xs sm:text-sm">{homeTeam.flag}</span>

@@ -19,15 +19,9 @@ import {
   Repeat,
   Play,
   Sparkles,
-  Bot,
-  Zap,
-  Shield,
-  Star,
   RefreshCw,
-  Plus,
   Check,
   Award,
-  ChevronRight,
 } from 'lucide-react';
 
 interface CareerModeProps {
@@ -85,8 +79,8 @@ export const CareerMode: React.FC<CareerModeProps> = ({ onBackToTitle, onLaunchM
   }, [club]);
 
   // Current Division Opponent
-  const currentOpponents = DIVISION_OPPONENTS[club.division] || DIVISION_OPPONENTS[5];
-  const currentOpponent = currentOpponents[club.seasonMatches % currentOpponents.length];
+  const currentOpponents = DIVISION_OPPONENTS[club.division] || DIVISION_OPPONENTS[5] || [];
+  const currentOpponent = currentOpponents[club.seasonMatches % (currentOpponents.length || 1)] || DIVISION_OPPONENTS[5][0];
 
   // Team Rating calculation
   const teamOvr = Math.round(

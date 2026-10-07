@@ -13,6 +13,8 @@ import { TournamentBracket } from './components/TournamentBracket';
 import { PenaltyShootout } from './components/PenaltyShootout';
 import { TrainingMode } from './components/TrainingMode';
 import { CareerMode } from './components/CareerMode';
+import { EASportsIntro } from './components/EASportsIntro';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { MatchSummaryModal } from './components/MatchSummaryModal';
 import { ControlsModal } from './components/ControlsModal';
 import { PlayerDatabaseModal } from './components/PlayerDatabaseModal';
@@ -20,6 +22,7 @@ import { SoccerGameEngine } from './game/engine';
 import { retroAudio } from './audio/retroAudio';
 
 type AppScreen =
+  | 'INTRO'
   | 'TITLE'
   | 'TEAM_SELECT_EXHIBITION'
   | 'TEAM_SELECT_TOURNAMENT'
@@ -30,7 +33,7 @@ type AppScreen =
   | 'CAREER';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<AppScreen>('TITLE');
+  const [currentScreen, setCurrentScreen] = useState<AppScreen>('INTRO');
 
   // Match Configuration Settings (Optimized for Chromebooks & Windows Laptops)
   const [settings, setSettings] = useState<MatchSettings>(() => {
@@ -48,7 +51,7 @@ export default function App() {
       crtFilter: true,
       soundEnabled: true,
       aspectRatio169: true,
-      performanceMode: isBudgetOrChromebook ? 'eco' : 'standard',
+      performanceMode: 'gopi', // 'gopi' default: tuned specifically for Intel N-series (N150/N100) with 8GB RAM iGPU
     };
   });
 
@@ -161,6 +164,11 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen w-full bg-slate-950 font-sans">
+      {/* 0. Tuxedo Penguin Gaming Sports Studio EA-Style Launch Intro */}
+      {currentScreen === 'INTRO' && (
+        <EASportsIntro onComplete={() => setCurrentScreen('TITLE')} />
+      )}
+
       {/* 1. Title Screen */}
       {currentScreen === 'TITLE' && (
         <TitleScreen
@@ -178,9 +186,10 @@ export default function App() {
           aspectRatio169={settings.aspectRatio169}
           onToggleAspectRatio={() => setSettings((s) => ({ ...s, aspectRatio169: !s.aspectRatio169 }))}
           performanceMode={settings.performanceMode}
-          onTogglePerformanceMode={() => setSettings((s) => ({ ...s, performanceMode: s.performanceMode === 'eco' ? 'standard' : 'eco' }))}
+          onTogglePerformanceMode={() => setSettings((s) => ({ ...s, performanceMode: s.performanceMode === 'gopi' ? 'standard' : s.performanceMode === 'standard' ? 'eco' : 'gopi' }))}
           onOpenControls={() => setShowControlsModal(true)}
           onOpenRoster={() => setShowRosterModal(true)}
+          onReplayIntro={() => setCurrentScreen('INTRO')}
         />
       )}
 
@@ -263,6 +272,9 @@ export default function App() {
       {showRosterModal && (
         <PlayerDatabaseModal onClose={() => setShowRosterModal(false)} />
       )}
+
+      {/* Offline Connectivity Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }

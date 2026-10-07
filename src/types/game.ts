@@ -183,6 +183,8 @@ export interface TournamentMatch {
   winnerId?: string;
 }
 
+export type PerformanceMode = 'standard' | 'gopi' | 'eco';
+
 export interface MatchSettings {
   mode: GameMode;
   halfLengthSeconds: number;   // 60, 90, 180
@@ -192,6 +194,6 @@ export interface MatchSettings {
   crtFilter: boolean;
   soundEnabled: boolean;
   aspectRatio169: boolean;     // True = strict 16:9 arcade framing, False = stretch to window
-  performanceMode: 'standard' | 'eco'; // 'eco' optimizes crowd, particles, and shadows for Chromebooks/laptops
+  performanceMode: PerformanceMode; // 'gopi' specifically tuned for Intel N-series (N150/N100) 8GB RAM integrated Intel Graphics
   autoPlay?: boolean;          // Auto Mode: AI plays on behalf of user team with manual override
 }

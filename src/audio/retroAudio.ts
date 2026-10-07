@@ -996,6 +996,57 @@ class RetroAudioEngine {
       }
     }
   }
+
+  /**
+   * Iconic EA Sports Style Intro Audio Stinger
+   * Deep sub-bass stadium impact, metallic shimmer fanfare, and booming announcer voice:
+   * "Tuxedo Penguin Gaming Sports Studio. It's in the game!"
+   */
+  public playEASportsIntroStinger() {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx || !this.masterGain) return;
+
+    const t = this.ctx.currentTime;
+
+    // 1. Sub-bass impact boom
+    const subOsc = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(140, t);
+    subOsc.frequency.exponentialRampToValueAtTime(32, t + 0.9);
+    subGain.gain.setValueAtTime(0.7, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+    subOsc.connect(subGain);
+    subGain.connect(this.masterGain);
+    subOsc.start(t);
+    subOsc.stop(t + 1.25);
+
+    // 2. Metallic shimmer / synth brass chord (EA fanfare)
+    const freqs = [220, 277.18, 329.63, 440, 554.37]; // A major 9th chord
+    freqs.forEach((freq, i) => {
+      if (!this.ctx || !this.masterGain) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = i % 2 === 0 ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(freq, t + 0.08);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.01, t + 1.4);
+      gain.gain.setValueAtTime(0.12, t + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t + 0.08);
+      osc.stop(t + 1.55);
+    });
+
+    // 3. Booming EA Sports style voiceover
+    setTimeout(() => {
+      this.speakCommentary(
+        "Tuxedo Penguin Gaming Sports Studio. It's in the game!",
+        () => {}
+      );
+    }, 450);
+  }
 }
 
 export const retroAudio = new RetroAudioEngine();

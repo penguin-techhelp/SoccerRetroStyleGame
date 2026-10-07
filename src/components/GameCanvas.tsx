@@ -5,7 +5,7 @@ import { MatchSettings, Team, CommentaryToast } from '../types/game';
 import { retroAudio } from '../audio/retroAudio';
 import { CommentaryToastBox } from './CommentaryToastBox';
 import { LiveMatchHUD, LiveStatsData, HUDViewMode } from './LiveMatchHUD';
-import { Pause, Play, RotateCcw, Volume2, VolumeX, ArrowLeft, BarChart2, Maximize2, Minimize2, Monitor, Bot } from 'lucide-react';
+import { Pause, Play, RotateCcw, Volume2, VolumeX, ArrowLeft, BarChart2, Maximize2, Minimize2, Monitor, Bot, Zap } from 'lucide-react';
 
 interface GameCanvasProps {
   homeTeam: Team;
@@ -471,6 +471,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             </button>
           )}
 
+          {/* Gopi Mode Status Tag for Intel N-Series iGPU */}
+          {settings.performanceMode === 'gopi' && (
+            <div
+              className="hidden sm:flex items-center gap-1 px-1.5 py-1 border border-cyan-500/80 bg-cyan-950/70 text-cyan-300 text-[9px] font-pixel shadow-xs"
+              title="Gopi Mode Active: Tuned for Intel Processor N150 / 8GB RAM Integrated Intel UHD Graphics"
+            >
+              <Zap className="w-3 h-3 text-cyan-400 fill-cyan-400 animate-pulse" />
+              <span>GOPI 60FPS</span>
+            </div>
+          )}
+
           {/* Pause Button */}
           <button
             onClick={togglePause}
@@ -494,10 +505,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       {/* Main Pitch Arena Viewport (16:9 Optimized) */}
       <div className="relative flex-1 w-full h-full flex items-center justify-center bg-black overflow-hidden">
         {isAspect169 ? (
-          <div className="relative aspect-[16/9] w-full max-h-full max-w-[calc(100vh*16/9)] shadow-2xl bg-slate-950 flex items-center justify-center border-x-2 sm:border-x-4 border-slate-900 overflow-hidden">
+          <div className="relative aspect-video w-full h-full max-w-full max-h-full shadow-2xl bg-slate-950 flex items-center justify-center border-x-2 sm:border-x-4 border-slate-900 overflow-hidden">
             <canvas
               ref={canvasRef}
-              className="w-full h-full block bg-slate-950 cursor-crosshair"
+              className="w-full h-full block bg-slate-950 cursor-crosshair object-contain"
             />
             {/* CRT Scanline Filter Overlay */}
             {settings.crtFilter && (

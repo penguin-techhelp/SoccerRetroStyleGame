@@ -188,9 +188,10 @@ export class SoccerGameEngine {
     this.weatherParticles = [];
     this.turfSplashes = [];
 
-    const isEco = this.settings.performanceMode === 'eco';
-    const rainCount = isEco ? 120 : 280;
-    const snowCount = isEco ? 100 : 240;
+    const isGopi = this.settings.performanceMode === 'gopi';
+    const isEco = this.settings.performanceMode === 'eco' || isGopi;
+    const rainCount = isGopi ? 45 : isEco ? 110 : 280;
+    const snowCount = isGopi ? 35 : isEco ? 90 : 240;
 
     if (this.settings.weather === 'rain') {
       // Diagonal falling rain streaks
@@ -225,6 +226,7 @@ export class SoccerGameEngine {
   public spawnTurfEffect(x: number, y: number, count: number = 3, forceType?: 'rain' | 'snow') {
     const weather = forceType || this.settings.weather;
     if (weather !== 'rain' && weather !== 'snow') return;
+    if (this.settings.performanceMode === 'gopi' && this.turfSplashes.length > 10) return;
 
     const isSnow = weather === 'snow';
     for (let i = 0; i < count; i++) {
@@ -429,11 +431,17 @@ export class SoccerGameEngine {
       return;
     }
 
-    // Find outfield player closest to the ball
+    // Find outfield player closest to the ball who does not have a red card
+    const eligiblePlayers = list.filter((p) => p.role !== 'GK' && !p.hasRedCard);
+    if (eligiblePlayers.length === 0) {
+      if (teamId === this.homeTeam.id) this.userControlledPlayerHome = null;
+      else this.userControlledPlayerAway = null;
+      return;
+    }
+
     let bestDist = Infinity;
-    let bestPlayer = list[9];
-    list.forEach((p) => {
-      if (p.role === 'GK' || p.hasRedCard) return;
+    let bestPlayer = eligiblePlayers[0];
+    eligiblePlayers.forEach((p) => {
       const d = Math.hypot(p.x - this.ball.x, p.y - this.ball.y);
       if (d < bestDist) {
         bestDist = d;
@@ -929,7 +937,7 @@ export class SoccerGameEngine {
     let bestScore = -Infinity;
 
     teammates.forEach((tm) => {
-      if (tm.id === passer.id || tm.role === 'GK') return;
+      if (tm.id === passer.id || tm.role === 'GK' || tm.hasRedCard) return;
       const angleToTm = Math.atan2(tm.y - passer.y, tm.x - passer.x);
       let angleDiff = Math.abs(angleToTm - passer.facingAngle);
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
@@ -1077,11 +1085,16 @@ export class SoccerGameEngine {
       const isStraightRed = Math.random() < 0.22 && fouler.yellowCards === 0;
       if (isStraightRed || fouler.yellowCards >= 1) {
         fouler.hasRedCard = true;
+        fouler.isControlled = false;
+        if (this.ball.ownerId === fouler.id) {
+          this.ball.ownerId = null;
+        }
         fouler.yellowCards = Math.max(fouler.yellowCards, 1);
         if (fouler.teamId === this.homeTeam.id) this.homeStats.redCards++;
         else this.awayStats.redCards++;
+        this.switchControlledPlayer(fouler.teamId);
         retroAudio.playRandomCrowdRedCardUproar();
-        this.showMessage('RED CARD!', `${fouler.name.toUpperCase()} SENT OFF`, 'red_card', 160);
+        this.showMessage('RED CARD!', `${fouler.name.toUpperCase()} SENT OFF TO BENCH`, 'red_card', 160);
         this.emitCommentary('red_card', foulerTeam.name, foulerTeam.flag, currentMinute, fouler.name);
       } else {
         fouler.yellowCards++;
@@ -1653,6 +1666,44 @@ export class SoccerGameEngine {
   }
 
   private updatePlayerPhysics(p: Player) {
+    if (p.hasRedCard) {
+      // Sent off: walk off the pitch to the team bench dugout on the sideline!
+      const isHome = p.teamId === this.homeTeam.id;
+      const squad = isHome ? this.homePlayers : this.awayPlayers;
+      const redCardIndex = squad.filter((m) => m.hasRedCard).indexOf(p);
+      const benchOffset = Math.max(0, redCardIndex) * 16;
+
+      const benchX = isHome ? PITCH_WIDTH / 2 - 160 - benchOffset : PITCH_WIDTH / 2 + 160 + benchOffset;
+      const benchY = PITCH_HEIGHT + 34;
+
+      const dx = benchX - p.x;
+      const dy = benchY - p.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > 4) {
+        // Walking off the pitch to the team bench
+        const walkSpeed = 2.4;
+        p.vx = (dx / dist) * walkSpeed;
+        p.vy = (dy / dist) * walkSpeed;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.facingAngle = Math.atan2(dy, dx);
+        p.state = 'running';
+        p.animTimer += 0.08;
+        p.animFrame = Math.floor(p.animTimer) % 4;
+      } else {
+        // Seated on the bench in the dugout
+        p.vx = 0;
+        p.vy = 0;
+        p.x = benchX;
+        p.y = benchY;
+        p.facingAngle = -Math.PI / 2; // Facing the pitch
+        p.state = 'idle';
+        p.animFrame = 0;
+      }
+      return;
+    }
+
     if (p.stateTimer > 0) {
       p.stateTimer--;
       if (p.stateTimer <= 0 && (p.state === 'sliding' || p.state === 'kicking' || p.state === 'tackled' || p.state === 'diving')) {

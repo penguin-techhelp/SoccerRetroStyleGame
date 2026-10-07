@@ -1,5 +1,5 @@
 import { PITCH_WIDTH, PITCH_HEIGHT, GOAL_Y_MIN, GOAL_Y_MAX, SoccerGameEngine } from './engine';
-import { Player, ReplayFrame } from '../types/game';
+import { Player, ReplayFrame, Team } from '../types/game';
 
 export class SoccerRenderer {
   private canvas: HTMLCanvasElement;
@@ -73,26 +73,30 @@ export class SoccerRenderer {
   }
 
   public render(engine: SoccerGameEngine, width: number, height: number) {
+    // Ensure safe positive dimensions to prevent canvas buffer crashes
+    const safeWidth = Math.max(320, width || 320);
+    const safeHeight = Math.max(180, height || 180);
+
     // Only reallocate canvas buffer if dimensions actually changed
     // (Prevents GPU texture thrashing and memory garbage collection spikes on Chromebooks)
-    if (this.lastWidth !== width || this.lastHeight !== height) {
-      this.canvas.width = width;
-      this.canvas.height = height;
-      this.lastWidth = width;
-      this.lastHeight = height;
+    if (this.lastWidth !== safeWidth || this.lastHeight !== safeHeight) {
+      this.canvas.width = safeWidth;
+      this.canvas.height = safeHeight;
+      this.lastWidth = safeWidth;
+      this.lastHeight = safeHeight;
       this.ctx.imageSmoothingEnabled = false;
     }
 
     const ctx = this.ctx;
 
     // Camera offset - tuned for 16:9 widescreen laptop displays (1024x576 base ratio)
-    const zoom = Math.min(width / 1024, height / 576);
+    const zoom = Math.min(safeWidth / 1024, safeHeight / 576);
     const camX = engine.cameraX;
     const camY = engine.cameraY;
 
     ctx.save();
     // Center camera on screen
-    ctx.translate(width / 2, height / 2);
+    ctx.translate(safeWidth / 2, safeHeight / 2);
     ctx.scale(zoom, zoom);
     ctx.translate(-camX, -camY);
 
@@ -127,7 +131,7 @@ export class SoccerRenderer {
     ctx.restore();
 
     // 9. Draw HUD (Radar Mini-Map, Charge Meters, Active Message Banners, Replay OSD)
-    this.drawHUD(engine, width, height);
+    this.drawHUD(engine, safeWidth, safeHeight);
   }
 
   // --- Stadium Stands & Ad Boards ---
@@ -157,14 +161,122 @@ export class SoccerRenderer {
       ctx.fillText(ad, x, -9);
     }
 
-    // Bottom ad board
+    // Bottom ad boards (Left & Right flanking technical dugouts)
     ctx.fillStyle = '#020617';
-    ctx.fillRect(20, PITCH_HEIGHT + 2, PITCH_WIDTH - 40, boardHeight);
+    const dugoutLeft = PITCH_WIDTH / 2 - 230;
+    const dugoutRight = PITCH_WIDTH / 2 + 230;
+
+    // Left bottom ad board
+    ctx.fillRect(20, PITCH_HEIGHT + 2, dugoutLeft - 20, boardHeight);
+    // Right bottom ad board
+    ctx.fillRect(dugoutRight, PITCH_HEIGHT + 2, PITCH_WIDTH - 40 - dugoutRight, boardHeight);
+
     ctx.fillStyle = '#38bdf8';
-    for (let x = 120; x < PITCH_WIDTH - 60; x += 280) {
+    for (let x = 120; x < dugoutLeft - 40; x += 280) {
       const ad = ads[Math.floor((x + 140) / 280) % ads.length];
       ctx.fillText(ad, x, PITCH_HEIGHT + 17);
     }
+    for (let x = dugoutRight + 80; x < PITCH_WIDTH - 60; x += 280) {
+      const ad = ads[Math.floor((x + 140) / 280) % ads.length];
+      ctx.fillText(ad, x, PITCH_HEIGHT + 17);
+    }
+
+    // Team Dugout Benches on the sideline
+    this.drawTeamBenches(engine);
+  }
+
+  // --- Team Dugouts / Bench Shelters ---
+  private drawTeamBenches(engine: SoccerGameEngine) {
+    const ctx = this.ctx;
+    const centerY = PITCH_HEIGHT + 8;
+    const benchW = 150;
+    const benchH = 34;
+
+    const drawDugout = (bx: number, team: Team, isHome: boolean) => {
+      // 1. Technical Area dashed white box on turf
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(bx - 10, PITCH_HEIGHT - 12, benchW + 20, 16);
+      ctx.setLineDash([]);
+
+      // Manager / Coach standing in technical area
+      const managerX = bx + 22;
+      const managerY = PITCH_HEIGHT - 4;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(managerX - 4, managerY - 14, 8, 10);
+      ctx.fillStyle = team.primaryColor;
+      ctx.fillRect(managerX - 1, managerY - 13, 2, 7);
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(managerX - 4, managerY - 4, 3, 5);
+      ctx.fillRect(managerX + 1, managerY - 4, 3, 5);
+      ctx.fillStyle = '#fcd34d';
+      ctx.fillRect(managerX - 3, managerY - 20, 6, 6);
+
+      // 2. Concrete Base Pad
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(bx, centerY, benchW, benchH);
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, centerY, benchW, benchH);
+
+      // 3. Dugout Shelter Canopy (Translucent acrylic with steel frame)
+      ctx.fillStyle = 'rgba(241, 245, 249, 0.28)';
+      ctx.fillRect(bx, centerY, benchW, benchH - 4);
+      ctx.fillStyle = team.primaryColor;
+      ctx.fillRect(bx, centerY - 2, benchW, 4);
+
+      // Shelter Frame Pillars
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(bx, centerY - 2, 3, benchH);
+      ctx.fillRect(bx + benchW - 3, centerY - 2, 3, benchH);
+      ctx.fillRect(bx + benchW / 2 - 1, centerY - 2, 2, benchH);
+
+      // 4. Team Badge & Label on Canopy
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${team.flag} ${isHome ? 'HOME' : 'AWAY'} BENCH`, bx + 10, centerY + 8);
+
+      // 5. Bucket Bench Seats & Reserve Players
+      for (let s = 0; s < 6; s++) {
+        const seatX = bx + 16 + s * 20;
+        const seatY = centerY + 18;
+
+        // Seat back & cushion
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(seatX - 5, seatY - 5, 10, 8);
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(seatX - 4, seatY + 3, 8, 4);
+
+        // Pre-seated reserve player in tracksuit on odd seats
+        if (s === 1 || s === 4) {
+          ctx.fillStyle = team.primaryColor;
+          ctx.fillRect(seatX - 4, seatY - 3, 8, 7);
+          ctx.fillStyle = '#fde047';
+          ctx.fillRect(seatX - 3, seatY - 9, 6, 6);
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(seatX - 4, seatY + 4, 8, 3);
+        }
+      }
+    };
+
+    // Home Dugout (Left side of midfield)
+    drawDugout(PITCH_WIDTH / 2 - 210, engine.homeTeam, true);
+
+    // Away Dugout (Right side of midfield)
+    drawDugout(PITCH_WIDTH / 2 + 50, engine.awayTeam, false);
+
+    // 4th Official Substitution Board Table at midfield
+    const midX = PITCH_WIDTH / 2;
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(midX - 16, centerY + 8, 32, 16);
+    ctx.strokeStyle = '#475569';
+    ctx.strokeRect(midX - 16, centerY + 8, 32, 16);
+    ctx.fillStyle = '#22c55e';
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('4TH OFF', midX, centerY + 18);
   }
 
   private drawCrowdRows(x: number, y: number, w: number, h: number, engine: SoccerGameEngine, isTop: boolean) {
@@ -551,12 +663,13 @@ export class SoccerRenderer {
     const ctx = this.ctx;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
 
-    // Player shadows
+    // Batched player shadows (single draw call for Intel UHD Graphics efficiency)
+    ctx.beginPath();
     [...engine.homePlayers, ...engine.awayPlayers].forEach((p) => {
-      ctx.beginPath();
+      if (p.hasRedCard && p.y >= PITCH_HEIGHT + 24) return;
       ctx.ellipse(p.x, p.y + 4, 10, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
     });
+    ctx.fill();
 
     // Ball dynamic shadow (shrinks and fades as altitude Z increases)
     const ball = engine.ball;
@@ -577,6 +690,51 @@ export class SoccerRenderer {
 
     ctx.save();
     ctx.translate(player.x, player.y);
+
+    // Check if player has red card and has reached the sideline bench dugout
+    if (player.hasRedCard && player.y >= PITCH_HEIGHT + 24) {
+      // Seated on the team dugout bench
+      const jerseyColor = isGK ? team.gkColor : team.primaryColor;
+      const shortsColor = isGK ? '#1e293b' : team.secondaryColor;
+      const sockColor = team.sockColor;
+
+      // Legs resting on bench
+      ctx.fillStyle = sockColor;
+      ctx.fillRect(-5, 6, 3, 5);
+      ctx.fillRect(2, 6, 3, 5);
+      ctx.fillStyle = '#090d16'; // Boots
+      ctx.fillRect(-6, 10, 5, 3);
+      ctx.fillRect(1, 10, 5, 3);
+
+      // Shorts
+      ctx.fillStyle = shortsColor;
+      ctx.fillRect(-6, 2, 12, 5);
+
+      // Jersey body (leaning forward in dejection)
+      ctx.fillStyle = jerseyColor;
+      ctx.fillRect(-7, -8, 14, 10);
+
+      // Arms resting on knees
+      ctx.fillStyle = player.skinTone;
+      ctx.fillRect(-8, -4, 3, 7);
+      ctx.fillRect(5, -4, 3, 7);
+
+      // Head bowed down
+      ctx.fillStyle = player.skinTone;
+      ctx.fillRect(-5, -16, 10, 8);
+      ctx.fillStyle = player.hairColor;
+      ctx.fillRect(-6, -18, 12, 4);
+
+      // Red Card badge hanging above seat
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(-3, -26, 6, 9);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-3, -26, 6, 9);
+
+      ctx.restore();
+      return;
+    }
 
     // Kicking / Sliding offsets
     let bodyY = 0;
@@ -665,8 +823,17 @@ export class SoccerRenderer {
 
     // Yellow / Red Card badge if carded
     if (player.hasRedCard) {
+      // Sent off: Walking off the pitch to the bench
+      const bounce = Math.sin(Date.now() / 180) * 2;
       ctx.fillStyle = '#ef4444';
-      ctx.fillRect(6, -24, 5, 7);
+      ctx.fillRect(-5, -30 + bounce, 10, 13);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-5, -30 + bounce, 10, 13);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '6px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('OFF', 0, -34 + bounce);
     } else if (player.yellowCards > 0) {
       ctx.fillStyle = '#facc15';
       ctx.fillRect(6, -24, 5, 7);
@@ -772,12 +939,17 @@ export class SoccerRenderer {
       ctx.fillStyle = 'rgba(2, 6, 23, 0.28)';
       ctx.fillRect(-100, -100, PITCH_WIDTH + 200, PITCH_HEIGHT + 200);
 
-      // Stadium floodlight cone highlights
-      const grad = ctx.createRadialGradient(PITCH_WIDTH / 2, PITCH_HEIGHT / 2, 100, PITCH_WIDTH / 2, PITCH_HEIGHT / 2, 700);
-      grad.addColorStop(0, 'rgba(255, 255, 240, 0.12)');
-      grad.addColorStop(1, 'rgba(0, 0, 0, 0.35)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, PITCH_WIDTH, PITCH_HEIGHT);
+      // Stadium floodlight highlights (optimized for Intel N-series iGPU in gopi mode)
+      if (engine.settings.performanceMode === 'gopi') {
+        ctx.fillStyle = 'rgba(255, 255, 240, 0.08)';
+        ctx.fillRect(0, 0, PITCH_WIDTH, PITCH_HEIGHT);
+      } else {
+        const grad = ctx.createRadialGradient(PITCH_WIDTH / 2, PITCH_HEIGHT / 2, 100, PITCH_WIDTH / 2, PITCH_HEIGHT / 2, 700);
+        grad.addColorStop(0, 'rgba(255, 255, 240, 0.12)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0.35)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, PITCH_WIDTH, PITCH_HEIGHT);
+      }
     }
   }
 
