@@ -512,7 +512,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             />
             {/* CRT Scanline Filter Overlay */}
             {settings.crtFilter && (
-              <div className="absolute inset-0 crt-overlay crt-vignette pointer-events-none z-10" />
+              <div className="absolute inset-0 crt-overlay pointer-events-none z-10" />
             )}
           </div>
         ) : (
@@ -523,7 +523,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             />
             {/* CRT Scanline Filter Overlay */}
             {settings.crtFilter && (
-              <div className="absolute inset-0 crt-overlay crt-vignette pointer-events-none z-10" />
+              <div className="absolute inset-0 crt-overlay pointer-events-none z-10" />
             )}
           </div>
         )}

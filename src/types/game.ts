@@ -195,5 +195,6 @@ export interface MatchSettings {
   soundEnabled: boolean;
   aspectRatio169: boolean;     // True = strict 16:9 arcade framing, False = stretch to window
   performanceMode: PerformanceMode; // 'gopi' specifically tuned for Intel N-series (N150/N100) 8GB RAM integrated Intel Graphics
+  enableShadows: boolean;           // False = clean, crisp, shadow-free pitch; True = drop shadows
   autoPlay?: boolean;          // Auto Mode: AI plays on behalf of user team with manual override
 }

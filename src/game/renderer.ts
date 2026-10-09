@@ -436,17 +436,19 @@ export class SoccerRenderer {
     ctx.save();
 
     // 1. Goal Interior Turf Ambient Shadow (Deep 3D cavity shadow)
-    const backTopPt = netMesh[0][netMesh[0].length - 1];
-    const backBottomPt = netMesh[netMesh.length - 1][netMesh[0].length - 1];
+    if (engine.settings.enableShadows) {
+      const backTopPt = netMesh[0][netMesh[0].length - 1];
+      const backBottomPt = netMesh[netMesh.length - 1][netMesh[0].length - 1];
 
-    ctx.beginPath();
-    ctx.moveTo(goalX, topY);
-    ctx.lineTo(backTopPt.x, backTopPt.y);
-    ctx.lineTo(backBottomPt.x, backBottomPt.y);
-    ctx.lineTo(goalX, bottomY);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(2, 22, 10, 0.45)';
-    ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(goalX, topY);
+      ctx.lineTo(backTopPt.x, backTopPt.y);
+      ctx.lineTo(backBottomPt.x, backBottomPt.y);
+      ctx.lineTo(goalX, bottomY);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(2, 22, 10, 0.45)';
+      ctx.fill();
+    }
 
     // 2. Net Fabric Translucent Backing (Gives tangible physical cloth volume)
     ctx.fillStyle = 'rgba(240, 248, 255, 0.08)';
@@ -476,16 +478,18 @@ export class SoccerRenderer {
     ctx.fill();
 
     // 4. Net Cord Shadow Layer on Pitch Turf
-    ctx.strokeStyle = 'rgba(0, 15, 5, 0.32)';
-    ctx.lineWidth = 1.6;
-    for (let r = 0; r < netMesh.length; r++) {
-      ctx.beginPath();
-      for (let c = 0; c < netMesh[r].length; c++) {
-        const pt = netMesh[r][c];
-        if (c === 0) ctx.moveTo(pt.x + 1.5, pt.y + 1.5);
-        else ctx.lineTo(pt.x + 1.5, pt.y + 1.5);
+    if (engine.settings.enableShadows) {
+      ctx.strokeStyle = 'rgba(0, 15, 5, 0.32)';
+      ctx.lineWidth = 1.6;
+      for (let r = 0; r < netMesh.length; r++) {
+        ctx.beginPath();
+        for (let c = 0; c < netMesh[r].length; c++) {
+          const pt = netMesh[r][c];
+          if (c === 0) ctx.moveTo(pt.x + 1.5, pt.y + 1.5);
+          else ctx.lineTo(pt.x + 1.5, pt.y + 1.5);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
     }
 
     // 5. Authentic Interlocking Diamond Netting (Honeycomb / Diamond Weave)
@@ -557,11 +561,13 @@ export class SoccerRenderer {
 
     // 7. Cylindrical 3D White Goal Posts & Crossbar
     // Post drop shadows onto turf
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
-    ctx.beginPath();
-    ctx.ellipse(goalX + depthDir * 2, topY + 4, 7, 3, 0, 0, Math.PI * 2);
-    ctx.ellipse(goalX + depthDir * 2, bottomY + 4, 7, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
+    if (engine.settings.enableShadows) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(goalX + depthDir * 2, topY + 4, 7, 3, 0, 0, Math.PI * 2);
+      ctx.ellipse(goalX + depthDir * 2, bottomY + 4, 7, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Ground mounting ring plates where posts enter turf
     ctx.fillStyle = '#64748b';
@@ -660,6 +666,7 @@ export class SoccerRenderer {
 
   // --- Shadows ---
   private drawShadows(engine: SoccerGameEngine) {
+    if (!engine.settings.enableShadows) return;
     const ctx = this.ctx;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
 

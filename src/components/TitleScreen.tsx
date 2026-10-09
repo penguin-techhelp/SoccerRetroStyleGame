@@ -19,6 +19,8 @@ interface TitleScreenProps {
   onToggleAspectRatio?: () => void;
   performanceMode?: PerformanceMode;
   onTogglePerformanceMode?: () => void;
+  enableShadows?: boolean;
+  onToggleShadows?: () => void;
   onOpenControls: () => void;
   onOpenRoster?: () => void;
   onReplayIntro?: () => void;
@@ -40,6 +42,8 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   onToggleAspectRatio,
   performanceMode = 'standard',
   onTogglePerformanceMode,
+  enableShadows = false,
+  onToggleShadows,
   onOpenControls,
   onOpenRoster,
   onReplayIntro,
@@ -422,6 +426,28 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               >
                 <Monitor className="w-3 h-3" />
                 <span>{aspectRatio169 ? '16:9 WIDE' : 'STRETCH'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Field Shadows Toggle */}
+          {onToggleShadows && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-arcade text-[10px]">SHADOWS:</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  retroAudio.playMenuBeep();
+                  onToggleShadows();
+                }}
+                className={`px-2 py-0.5 font-arcade border text-[10px] cursor-pointer transition-colors ${
+                  enableShadows
+                    ? 'bg-slate-800 border-slate-600 text-slate-300'
+                    : 'bg-emerald-950 border-emerald-500 text-emerald-300 font-bold'
+                }`}
+                title="Field Shadows: OFF for clean, bright, shadow-free pitch"
+              >
+                <span>{enableShadows ? 'ON' : 'OFF'}</span>
               </button>
             </div>
           )}

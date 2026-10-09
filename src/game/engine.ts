@@ -1820,8 +1820,11 @@ export class SoccerGameEngine {
       if (this.playState === 'in_play') {
         const lastScorer = (this.lastShooterId && this.homePlayers.find((p) => p.id === this.lastShooterId)) ||
           this.homePlayers.find((p) => p.id === this.userControlledPlayerHome?.id) ||
-          this.homePlayers[9];
-        this.triggerGoal(this.homeTeam.id, lastScorer.name, lastScorer.number, lastScorer.id);
+          this.homePlayers[9] ||
+          this.homePlayers[0];
+        if (lastScorer) {
+          this.triggerGoal(this.homeTeam.id, lastScorer.name, lastScorer.number, lastScorer.id);
+        }
       }
       this.ball.vx = Math.min(0, this.ball.vx * -0.3); // Bounce off net
       return;
@@ -1832,8 +1835,11 @@ export class SoccerGameEngine {
       if (this.playState === 'in_play') {
         const lastScorer = (this.lastShooterId && this.awayPlayers.find((p) => p.id === this.lastShooterId)) ||
           this.awayPlayers.find((p) => p.id === this.userControlledPlayerAway?.id) ||
-          this.awayPlayers[9];
-        this.triggerGoal(this.awayTeam.id, lastScorer.name, lastScorer.number, lastScorer.id);
+          this.awayPlayers[9] ||
+          this.awayPlayers[0];
+        if (lastScorer) {
+          this.triggerGoal(this.awayTeam.id, lastScorer.name, lastScorer.number, lastScorer.id);
+        }
       }
       this.ball.vx = Math.max(0, this.ball.vx * -0.3);
       return;

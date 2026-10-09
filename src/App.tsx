@@ -52,6 +52,7 @@ export default function App() {
       soundEnabled: true,
       aspectRatio169: true,
       performanceMode: 'gopi', // 'gopi' default: tuned specifically for Intel N-series (N150/N100) with 8GB RAM iGPU
+      enableShadows: false, // Default to FALSE: clean, shadow-free, crystal-clear pitch!
     };
   });
 
@@ -187,6 +188,8 @@ export default function App() {
           onToggleAspectRatio={() => setSettings((s) => ({ ...s, aspectRatio169: !s.aspectRatio169 }))}
           performanceMode={settings.performanceMode}
           onTogglePerformanceMode={() => setSettings((s) => ({ ...s, performanceMode: s.performanceMode === 'gopi' ? 'standard' : s.performanceMode === 'standard' ? 'eco' : 'gopi' }))}
+          enableShadows={settings.enableShadows}
+          onToggleShadows={() => setSettings((s) => ({ ...s, enableShadows: !s.enableShadows }))}
           onOpenControls={() => setShowControlsModal(true)}
           onOpenRoster={() => setShowRosterModal(true)}
           onReplayIntro={() => setCurrentScreen('INTRO')}
